@@ -1,0 +1,69 @@
+{
+ "code": "Ok",
+ "routes": [
+  {
+   "legs": [
+    {
+     "steps": [],
+     "weight": 732.51,
+     "summary": "",
+     "duration": 6121.3,
+     "distance": 7641.6
+    }
+   ],
+   "weight_name": "routability",
+   "geometry": {
+    "coordinates": [
+     [
+      28.978392,
+      41.008203
+     ],
+     [
+      28.978412,
+      41.008239
+     ],
+     [
+      28.978439,
+      41.008228
+     ],
+     [
+      28.978454,
+      41.008223
+     ],
+     [
+      28.97846,
+      41.008233
+     ],
+     [
+      28.978476,
+      41.008231
+     ]
+    ],
+    "type": "LineString"
+   },
+   "weight": 732.51,
+   "duration": 6121.3,
+   "distance": 7641.6
+  }
+ ],
+ "waypoints": [
+  {
+   "hint": "tVqBiLyRI548AAAALAAAAAAAAAAAAAAAhwHBQPfLikAAAAAAAAAAAC8AAAAkAAAAAAAAAAAAAAB_AAAA2Cy6AUu8cQLgLLoBSLxxAgAAbwEAAAAA",
+   "location": [
+    28.978392,
+    41.008203
+   ],
+   "name": "Alemdar Caddesi",
+   "distance": 0.7507955775
+  },
+  {
+   "hint": "-AqqhVxEEZFxAQAAtgAAAAAAAAAAAAAAkroxQresrUEAAAAAAAAAAGMBAACuAAAAAAAAAAAAAAB_AAAA3-q6AR93cQK46roBJHdxAgAA3wsAAAAA",
+   "location": [
+    29.027039,
+    40.990495
+   ],
+   "name": "Bekçi Sokağı",
+   "distance": 3.329144756
+  }
+ ]
+}
