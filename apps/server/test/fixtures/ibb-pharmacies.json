@@ -1,0 +1,48 @@
+{
+ "ArrayOfAramaList": {
+  "@xmlns:xsd": "http://www.w3.org/2001/XMLSchema",
+  "@xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance",
+  "AramaList": [
+   {
+    "ADI": "DENİZ ECZANESİ",
+    "ADRES": "Kınalıada Mahallesi, İskele Sokak, 3/B",
+    "TELEFON": "+902163815181",
+    "LON": "29.05476093341990",
+    "LAT": "40.91038290028480",
+    "ILCEID": "1103",
+    "MESAFE": "0",
+    "ILCEADI": "ADALAR"
+   },
+   {
+    "ADI": "HAYAT ECZANESİ",
+    "ADRES": "Heybeliada Mahallesi, Ayyıldız Caddesi, 43",
+    "TELEFON": "+902163519907",
+    "LON": "29.09972334614150",
+    "LAT": "40.87805004911360",
+    "ILCEID": "1103",
+    "MESAFE": "0",
+    "ILCEADI": "ADALAR"
+   },
+   {
+    "ADI": "YENİ ECZANE",
+    "ADRES": "Nizam Mahallesi, Çınar Caddesi, 7/A",
+    "TELEFON": "+902163823800",
+    "LON": "29.12815199974780",
+    "LAT": "40.87329499783530",
+    "ILCEID": "1103",
+    "MESAFE": "0",
+    "ILCEADI": "ADALAR"
+   },
+   {
+    "ADI": "BURGAZADA ECZANESİ",
+    "ADRES": "Burgazadası Mahallesi, Çınarlık Sokak, 3",
+    "TELEFON": "+902163812112",
+    "LON": "29.06919493888460",
+    "LAT": "40.87998754816050",
+    "ILCEID": "1103",
+    "MESAFE": "0",
+    "ILCEADI": "ADALAR"
+   }
+  ]
+ }
+}
