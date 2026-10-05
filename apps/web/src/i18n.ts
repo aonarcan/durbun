@@ -76,6 +76,14 @@ const strings = {
     tr: "Google 3B şehirler açılamadı, OSM binaları gösteriliyor. Cesium ion'da Asset Depot'tan Google Photorealistic 3D Tiles'ı ekleyin.",
     en: "Google's 3D cities didn't load, so OSM buildings are shown. Add Google Photorealistic 3D Tiles from the Asset Depot in Cesium ion.",
   },
+  googleFlatInTurkey: {
+    tr: "Google'ın 3B modelleri Türkiye'yi kapsamıyor; burada binalar düz görünür. Yurt dışında gerçekçi 3B şehirler gösterir.",
+    en: "Google's 3D models don't cover Türkiye, so buildings look flat here. Abroad it shows realistic 3D cities.",
+  },
+  buildings3d: { tr: '3B binalar', en: '3D buildings' },
+  buildingsOsm: { tr: 'OSM', en: 'OSM' },
+  buildingsGoogle: { tr: 'Google', en: 'Google' },
+  buildingsOff: { tr: 'Kapalı', en: 'Off' },
   globeNoToken: {
     tr: '3B arazi ve binalar için ücretsiz Cesium ion anahtarı ekleyin (.env içinde CESIUM_ION_TOKEN).',
     en: 'Add a free Cesium ion token (CESIUM_ION_TOKEN in .env) for 3D terrain and buildings.',
