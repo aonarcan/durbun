@@ -3,6 +3,7 @@ import { DETAIL_LABELS, KIND_LABELS, t } from '../i18n.ts';
 import { dateTime, timeAgo } from '../lib/format.ts';
 import { useNow } from '../lib/useNow.ts';
 import { useData, useUi } from '../state.ts';
+import { Directions } from './Directions.tsx';
 
 /** Details of the clicked feature. */
 export function InfoPanel() {
@@ -11,6 +12,7 @@ export function InfoPanel() {
   const lang = useUi((s) => s.lang);
   const feature = useData((s) => (selectedId ? s.byId.get(selectedId) : undefined));
   const source = useData((s) => s.sources.find((x) => x.id === feature?.properties.source));
+  const group = useData((s) => s.layers.find((l) => l.id === feature?.properties.layer)?.group);
   const now = useNow(30_000);
 
   if (!feature) return null;
@@ -65,6 +67,7 @@ export function InfoPanel() {
           </a>
         )}
       </div>
+      {group === 'places' && <Directions feature={feature} />}
     </aside>
   );
 }

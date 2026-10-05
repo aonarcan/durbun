@@ -4,13 +4,24 @@ import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import { useEffect, useRef } from 'react';
 import { MAX_MAP_PITCH } from '../lib/camera.ts';
 import { styleFor } from '../lib/basemaps.ts';
-import { localiseLabels, styleLayerIds, syncDataLayers } from '../lib/mapLayers.ts';
-import { isVisible, useData, useUi, type ViewMode } from '../state.ts';
+import { lineBounds, localiseLabels, styleLayerIds, syncDataLayers, syncRoute, type RouteDrawing } from '../lib/mapLayers.ts';
+import { shownFeatures } from '../lib/filters.ts';
+import { isVisible, useData, useRoute, useUi, type ViewMode } from '../state.ts';
 
 // MapLibre's worker is a separate module; let Vite bundle it and tell MapLibre where it is.
 setWorkerUrl(workerUrl);
 
 type View2D = Exclude<ViewMode, '3d'>;
+
+function currentRoute(): RouteDrawing | undefined {
+  const r = useRoute.getState();
+  if (r.status !== 'ready' || !r.result) return undefined;
+  return {
+    mode: r.result.mode,
+    coordinates: r.result.geometry.coordinates as [number, number][],
+    ...(r.from ? { from: r.from } : {}),
+  };
+}
 
 /** The 2D map: OpenFreeMap or Esri basemaps with Dürbün's data layers on top. */
 export function MapView({ view }: { view: View2D }) {
@@ -21,6 +32,7 @@ export function MapView({ view }: { view: View2D }) {
   const layers = useData((s) => s.layers);
   const collections = useData((s) => s.collections);
   const visible = useUi((s) => s.visible);
+  const windows = useUi((s) => s.windows);
   const lang = useUi((s) => s.lang);
 
   // Create the map once; later changes go through the effects below.
@@ -46,7 +58,13 @@ export function MapView({ view }: { view: View2D }) {
     const refresh = () => {
       const data = useData.getState();
       const ui = useUi.getState();
-      syncDataLayers(map, data.layers, data.collections, (l) => isVisible(l, ui.visible));
+      syncDataLayers(
+        map,
+        data.layers,
+        (l) => shownFeatures(l, data.collections[l.id], ui.windows),
+        (l) => isVisible(l, ui.visible),
+      );
+      syncRoute(map, currentRoute());
       localiseLabels(map, ui.lang);
     };
     map.on('style.load', refresh);
@@ -91,13 +109,41 @@ export function MapView({ view }: { view: View2D }) {
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
-    syncDataLayers(map, layers, collections, (l) => isVisible(l, visible));
-  }, [layers, collections, visible]);
+    syncDataLayers(
+      map,
+      layers,
+      (l) => shownFeatures(l, collections[l.id], windows),
+      (l) => isVisible(l, visible),
+    );
+  }, [layers, collections, visible, windows]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (map?.isStyleLoaded()) localiseLabels(map, lang);
   }, [lang]);
+
+  // Draw the route and frame it when a new one arrives.
+  useEffect(
+    () =>
+      useRoute.subscribe((r, prev) => {
+        const map = mapRef.current;
+        if (!map || !map.isStyleLoaded()) return;
+        const drawing = currentRoute();
+        syncRoute(map, drawing);
+        if (drawing && r.result !== prev.result) {
+          const [w, s, e, n] = lineBounds(drawing.coordinates);
+          const wide = window.innerWidth > 1100;
+          map.fitBounds(
+            [
+              [w, s],
+              [e, n],
+            ],
+            { padding: wide ? { top: 60, bottom: 60, left: 340, right: 420 } : 40, maxZoom: 17, duration: 800 },
+          );
+        }
+      }),
+    [],
+  );
 
   // Fly to a feature when the info panel asks for it.
   useEffect(() => {

@@ -35,3 +35,20 @@ export function interval(sec: number, lang: Lang): string {
   if (sec < 3600) return lang === 'tr' ? `${Math.round(sec / 60)} dk` : `${Math.round(sec / 60)} min`;
   return lang === 'tr' ? `${Math.round(sec / 3600)} sa` : `${Math.round(sec / 3600)} h`;
 }
+
+/** "850 m" / "4,3 km" (Turkish decimal comma) / "4.3 km". */
+export function distance(metres: number, lang: Lang): string {
+  if (metres < 1000) return `${Math.round(metres / 10) * 10} m`;
+  const km = new Intl.NumberFormat(locale(lang), { maximumFractionDigits: metres < 10_000 ? 1 : 0 }).format(metres / 1000);
+  return `${km} km`;
+}
+
+/** "12 dk" / "1 sa 5 dk" / "12 min" / "1 h 5 min". */
+export function travelTime(seconds: number, lang: Lang): string {
+  const minutes = Math.max(1, Math.round(seconds / 60));
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  const [hu, mu] = lang === 'tr' ? ['sa', 'dk'] : ['h', 'min'];
+  if (h === 0) return `${m} ${mu}`;
+  return m === 0 ? `${h} ${hu}` : `${h} ${hu} ${m} ${mu}`;
+}

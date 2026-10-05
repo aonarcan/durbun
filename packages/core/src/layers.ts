@@ -12,6 +12,11 @@ export interface LayerInfo {
   attribution: string;
   /** Ids of the sources that feed this layer. */
   sources: string[];
+  /**
+   * For layers of timed events: the time windows (in hours) the viewer can
+   * pick from, and the one shown at first. Features older than the window are hidden.
+   */
+  timeWindows?: { options: number[]; default: number };
 }
 
 export type LayerGroup = 'hazards' | 'roads' | 'transport' | 'places' | 'weather' | 'air-sea' | 'news';

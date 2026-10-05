@@ -3,16 +3,19 @@ import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { ServerEvent } from '@durbun/core';
 import type { Store } from './kit/store.ts';
+import { isTravelMode, parseLngLat, type Router } from './routing.ts';
 
 export interface AppOptions {
   store: Store;
   cesiumIonToken: string;
+  /** Directions; /api/route answers 503 without one. */
+  router?: Router;
   /** Built web app to serve, if it exists. */
   webDist?: string;
 }
 
 /** The HTTP API plus, in production, the built web app. */
-export async function buildApp({ store, cesiumIonToken, webDist }: AppOptions): Promise<FastifyInstance> {
+export async function buildApp({ store, cesiumIonToken, webDist, router }: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
 
   app.addHook('onSend', async (req, reply) => {
@@ -30,6 +33,22 @@ export async function buildApp({ store, cesiumIonToken, webDist }: AppOptions): 
   });
 
   app.get('/api/sources', async () => store.allHealth());
+
+  app.get<{ Querystring: { from?: string; to?: string; mode?: string } }>('/api/route', async (req, reply) => {
+    const from = parseLngLat(req.query.from);
+    const to = parseLngLat(req.query.to);
+    const mode = req.query.mode ?? 'car';
+    if (!from || !to || !isTravelMode(mode)) {
+      return reply.code(400).send({ error: 'Use from=lng,lat&to=lng,lat&mode=car|foot' });
+    }
+    if (!router) return reply.code(503).send({ error: 'Routing is not available' });
+    try {
+      return await router.route(mode, from, to);
+    } catch (err) {
+      const status = (err as { status?: number }).status === 429 ? 429 : 502;
+      return reply.code(status).send({ error: err instanceof Error ? err.message : 'Routing failed' });
+    }
+  });
 
   app.get('/api/events', (req, reply) => {
     reply.hijack();

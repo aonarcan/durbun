@@ -1,4 +1,4 @@
-import type { FeatureCollection, LayerSummary } from '@durbun/core';
+import type { Feature, FeatureCollection, LayerSummary } from '@durbun/core';
 import type { ExpressionSpecification, GeoJSONSource, LayerSpecification, Map as MapLibreMap } from 'maplibre-gl';
 import { FONT_BOLD } from './basemaps.ts';
 
@@ -27,11 +27,10 @@ export function styleLayerIds(layerId: string): string[] {
  * Adds derived properties the map styles use. MapLibre expressions can't read
  * dates, so earthquake age is computed here in hours.
  */
-export function prepare(fc: FeatureCollection | undefined, now = Date.now()): FeatureCollection {
-  if (!fc) return { type: 'FeatureCollection', features: [] };
+export function prepare(features: Feature[], now = Date.now()): FeatureCollection {
   return {
     type: 'FeatureCollection',
-    features: fc.features.map((f) => {
+    features: features.map((f) => {
       const observed = f.properties.observedAt ? new Date(f.properties.observedAt).getTime() : NaN;
       const ageHours = Number.isFinite(observed) ? (now - observed) / 3_600_000 : 9999;
       // Nested objects become strings inside MapLibre, so details stay out; the info panel reads the original.
@@ -118,12 +117,12 @@ function specsFor(layer: LayerSummary): LayerSpecification[] {
 export function syncDataLayers(
   map: MapLibreMap,
   layers: LayerSummary[],
-  collections: Record<string, FeatureCollection>,
+  featuresFor: (layer: LayerSummary) => Feature[],
   isOn: (layer: LayerSummary) => boolean,
 ): void {
   for (const layer of layers) {
     const src = sourceId(layer.id);
-    const data = prepare(collections[layer.id]) as unknown as Parameters<GeoJSONSource['setData']>[0];
+    const data = prepare(featuresFor(layer)) as unknown as Parameters<GeoJSONSource['setData']>[0];
     const existing = map.getSource(src);
     if (existing && 'setData' in existing) {
       (existing as GeoJSONSource).setData(data);
@@ -154,4 +153,89 @@ export function localiseLabels(map: MapLibreMap, lang: 'tr' | 'en'): void {
       map.setLayoutProperty(layer.id, 'text-field', field);
     }
   }
+}
+
+// ---- directions ----
+
+const ROUTE_SOURCE = 'durbun-route';
+export const ROUTE_COLORS = { car: '#1a73e8', foot: '#0b8043' } as const;
+
+export interface RouteDrawing {
+  mode: 'car' | 'foot';
+  coordinates: [number, number][];
+  from?: [number, number];
+}
+
+/** Draws (or removes) the current route under the data markers, so the destination stays clickable. */
+export function syncRoute(map: MapLibreMap, route: RouteDrawing | undefined): void {
+  const features = route
+    ? [
+        {
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: route.coordinates },
+          properties: { part: 'line', mode: route.mode },
+        },
+        ...(route.from
+          ? [{ type: 'Feature', geometry: { type: 'Point', coordinates: route.from }, properties: { part: 'start' } }]
+          : []),
+      ]
+    : [];
+  const data = { type: 'FeatureCollection', features } as unknown as Parameters<GeoJSONSource['setData']>[0];
+  const existing = map.getSource(ROUTE_SOURCE) as GeoJSONSource | undefined;
+  if (existing) {
+    existing.setData(data);
+    return;
+  }
+  map.addSource(ROUTE_SOURCE, { type: 'geojson', data: data as never });
+  // Insert below the first data layer so markers stay on top of the line.
+  const before = map.getStyle().layers?.find((l) => l.id.startsWith('durbun-') && !l.id.startsWith(ROUTE_SOURCE))?.id;
+  const lineColor = ['match', ['get', 'mode'], 'foot', ROUTE_COLORS.foot, ROUTE_COLORS.car] as unknown as ExpressionSpecification;
+  const isLine = ['==', ['get', 'part'], 'line'] as unknown as ExpressionSpecification;
+  map.addLayer(
+    {
+      id: `${ROUTE_SOURCE}-casing`,
+      type: 'line',
+      source: ROUTE_SOURCE,
+      filter: isLine,
+      layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: { 'line-color': '#ffffff', 'line-width': 9 },
+    },
+    before,
+  );
+  map.addLayer(
+    {
+      id: `${ROUTE_SOURCE}-line`,
+      type: 'line',
+      source: ROUTE_SOURCE,
+      filter: isLine,
+      layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: { 'line-color': lineColor, 'line-width': 5 },
+    },
+    before,
+  );
+  map.addLayer(
+    {
+      id: `${ROUTE_SOURCE}-start`,
+      type: 'circle',
+      source: ROUTE_SOURCE,
+      filter: ['==', ['get', 'part'], 'start'] as unknown as ExpressionSpecification,
+      paint: { 'circle-radius': 7, 'circle-color': '#1a73e8', 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 3 },
+    },
+    before,
+  );
+}
+
+/** [west, south, east, north] around a line. */
+export function lineBounds(coords: [number, number][]): [number, number, number, number] {
+  let w = Infinity;
+  let s = Infinity;
+  let e = -Infinity;
+  let n = -Infinity;
+  for (const [lng, lat] of coords) {
+    w = Math.min(w, lng);
+    e = Math.max(e, lng);
+    s = Math.min(s, lat);
+    n = Math.max(n, lat);
+  }
+  return [w, s, e, n];
 }

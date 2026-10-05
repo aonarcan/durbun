@@ -1,5 +1,6 @@
 import { LAYER_GROUP_NAMES, type LayerGroup, type LayerSummary } from '@durbun/core';
 import { t } from '../i18n.ts';
+import { shownFeatures, windowFor, windowLabel } from '../lib/filters.ts';
 import { timeAgo } from '../lib/format.ts';
 import { useNow } from '../lib/useNow.ts';
 import { isVisible, useData, useUi } from '../state.ts';
@@ -7,7 +8,8 @@ import { isVisible, useData, useUi } from '../state.ts';
 export function LayerPanel() {
   const layers = useData((s) => s.layers);
   const sources = useData((s) => s.sources);
-  const { lang, visible, setVisible, panelOpen, setPage } = useUi();
+  const collections = useData((s) => s.collections);
+  const { lang, visible, setVisible, windows, setWindow, panelOpen, setPage } = useUi();
   const now = useNow(15_000);
 
   const groups = new Map<LayerGroup, LayerSummary[]>();
@@ -34,7 +36,7 @@ export function LayerPanel() {
                     <span className="layer-name">{l.name[lang]}</span>
                     <span className="layer-meta">
                       {l.updatedAt
-                        ? `${l.count} ${t(lang, 'items')} · ${timeAgo(l.updatedAt, lang, now)}`
+                        ? `${shownFeatures(l, collections[l.id], windows, now).length} ${t(lang, 'items')} · ${timeAgo(l.updatedAt, lang, now)}`
                         : t(lang, 'noDataYet')}
                       {failing(l) && (
                         <span className="warn" title={t(lang, 'sources')}>
@@ -48,6 +50,25 @@ export function LayerPanel() {
                     </span>
                   </span>
                 </label>
+                {l.timeWindows && (
+                  <div className="window-picker">
+                    <span className="muted">{t(lang, 'last')}</span>
+                    <div className="segmented small" role="radiogroup" aria-label={t(lang, 'timeWindow')}>
+                    {l.timeWindows.options.map((h) => (
+                      <button
+                        key={h}
+                        type="button"
+                        role="radio"
+                        aria-checked={windowFor(l, windows) === h}
+                        className={windowFor(l, windows) === h ? 'active' : ''}
+                        onClick={() => setWindow(l.id, h)}
+                      >
+                        {windowLabel(h, lang)}
+                      </button>
+                    ))}
+                    </div>
+                  </div>
+                )}
               </li>
             ))}
           </ul>

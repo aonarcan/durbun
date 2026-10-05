@@ -13,8 +13,10 @@ import {
   zoomFromRange,
   type CameraState,
 } from '../lib/camera.ts';
-import { KIND_COLORS } from '../lib/mapLayers.ts';
-import { isVisible, useData, useUi } from '../state.ts';
+import { shownFeatures } from '../lib/filters.ts';
+import { KIND_COLORS, lineBounds, ROUTE_COLORS } from '../lib/mapLayers.ts';
+import { isVisible, useData, useRoute, useUi } from '../state.ts';
+import { GlobeControls, setUpMouse } from './GlobeControls.tsx';
 
 let configPromise: Promise<{ cesiumIonToken: string }> | undefined;
 function loadConfig() {
@@ -121,10 +123,12 @@ export default function GlobeView() {
   const sourcesRef = useRef(new Map<string, Cesium.CustomDataSource>());
   const [hasToken, setHasToken] = useState<boolean | undefined>(undefined);
   const [ready, setReady] = useState(false);
+  const [buildings, setBuildings] = useState<'google' | 'osm' | 'none'>('none');
 
   const layers = useData((s) => s.layers);
   const collections = useData((s) => s.collections);
   const visible = useUi((s) => s.visible);
+  const windows = useUi((s) => s.windows);
   const lang = useUi((s) => s.lang);
 
   useEffect(() => {
@@ -155,6 +159,7 @@ export default function GlobeView() {
         requestRenderMode: true,
       });
       viewerRef.current = viewer;
+      setUpMouse(viewer);
       viewer.scene.globe.depthTestAgainstTerrain = Boolean(cesiumIonToken);
       applyCamera(viewer, useUi.getState().camera);
 
@@ -162,11 +167,17 @@ export default function GlobeView() {
         try {
           // Dürbün has no search box, so no other geocoder is used alongside Google's tiles.
           const tiles = await Cesium.createGooglePhotorealistic3DTileset({ onlyUsingWithGoogleGeocoder: true });
-          if (!cancelled) viewer.scene.primitives.add(tiles);
+          if (!cancelled) {
+            viewer.scene.primitives.add(tiles);
+            setBuildings('google');
+          }
         } catch {
           try {
             const osm = await Cesium.createOsmBuildingsAsync();
-            if (!cancelled) viewer.scene.primitives.add(osm);
+            if (!cancelled) {
+              viewer.scene.primitives.add(osm);
+              setBuildings('osm');
+            }
           } catch {
             // Terrain and imagery still work without buildings.
           }
@@ -182,6 +193,7 @@ export default function GlobeView() {
       handler.setInputAction((click: { position: Cesium.Cartesian2 }) => {
         const picked = viewer?.scene.pick(click.position) as { id?: Cesium.Entity } | undefined;
         const id = picked?.id instanceof Cesium.Entity ? picked.id.id : undefined;
+        if (id?.startsWith('route:')) return; // the route line is not a place
         useUi.getState().select(id);
       }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
@@ -211,7 +223,7 @@ export default function GlobeView() {
       ds.show = isVisible(layer, visible);
       ds.entities.suspendEvents();
       ds.entities.removeAll();
-      for (const f of collections[layer.id]?.features ?? []) {
+      for (const f of shownFeatures(layer, collections[layer.id], windows)) {
         if (f.geometry.type !== 'Point') continue;
         const [lng, lat] = f.geometry.coordinates;
         const position = Cesium.Cartesian3.fromDegrees(lng, lat);
@@ -242,7 +254,58 @@ export default function GlobeView() {
       ds.entities.resumeEvents();
     }
     viewer.scene.requestRender();
-  }, [layers, collections, visible, ready]);
+  }, [layers, collections, visible, windows, ready]);
+
+  // The route: a line on the ground from where you are to the chosen place.
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer || !ready) return;
+    const ds = new Cesium.CustomDataSource('route');
+    void viewer.dataSources.add(ds);
+    const draw = (framing: boolean) => {
+      const r = useRoute.getState();
+      ds.entities.removeAll();
+      if (r.status === 'ready' && r.result) {
+        const coords = r.result.geometry.coordinates as [number, number][];
+        ds.entities.add({
+          id: 'route:line',
+          polyline: {
+            positions: Cesium.Cartesian3.fromDegreesArray(coords.flat()),
+            width: 6,
+            clampToGround: true,
+            material: Cesium.Color.fromCssColorString(ROUTE_COLORS[r.result.mode]),
+          },
+        });
+        if (r.from) {
+          ds.entities.add({
+            id: 'route:start',
+            position: Cesium.Cartesian3.fromDegrees(r.from[0], r.from[1]),
+            point: {
+              pixelSize: 14,
+              color: Cesium.Color.fromCssColorString('#1a73e8'),
+              outlineColor: Cesium.Color.WHITE,
+              outlineWidth: 3,
+              heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+              disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            },
+          });
+        }
+        if (framing) {
+          const [w, s, e, n] = lineBounds(coords);
+          const padLng = (e - w) * 0.3 + 0.002;
+          const padLat = (n - s) * 0.3 + 0.002;
+          viewer.camera.flyTo({ destination: Cesium.Rectangle.fromDegrees(w - padLng, s - padLat, e + padLng, n + padLat) });
+        }
+      }
+      viewer.scene.requestRender();
+    };
+    draw(false);
+    const unsubscribe = useRoute.subscribe((r, prev) => draw(r.result !== prev.result));
+    return () => {
+      unsubscribe();
+      if (!viewer.isDestroyed()) void viewer.dataSources.remove(ds, true);
+    };
+  }, [ready]);
 
   // Fly to a feature when the info panel asks for it.
   useEffect(() => {
@@ -257,7 +320,9 @@ export default function GlobeView() {
   return (
     <div className="globe-wrap">
       <div ref={container} className="map" aria-label="3B harita" />
+      {ready && viewerRef.current && <GlobeControls viewer={viewerRef.current} />}
       {hasToken === false && <div className="globe-hint">{t(lang, 'globeNoToken')}</div>}
+      {hasToken && buildings === 'osm' && <div className="globe-hint">{t(lang, 'globeOsmFallback')}</div>}
     </div>
   );
 }

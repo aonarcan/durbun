@@ -1,7 +1,16 @@
-import type { Feature, FeatureCollection, LayerSummary, ServerEvent, SourceHealth } from '@durbun/core';
+import type {
+  Feature,
+  FeatureCollection,
+  LayerSummary,
+  RouteResult,
+  ServerEvent,
+  SourceHealth,
+  TravelMode,
+} from '@durbun/core';
 import { create } from 'zustand';
 import type { Lang } from './i18n.ts';
 import { DEFAULT_CAMERA, type CameraState } from './lib/camera.ts';
+import { locate } from './lib/locate.ts';
 
 export type ViewMode = 'map' | 'satellite' | 'dark' | '3d';
 export type Page = 'map' | 'sources';
@@ -14,6 +23,8 @@ interface UiState {
   camera: CameraState;
   /** Layer id → shown. Layers missing here use their defaultOn. */
   visible: Record<string, boolean>;
+  /** Layer id → chosen time window in hours, for layers that offer one. */
+  windows: Record<string, number>;
   selectedId: string | undefined;
   panelOpen: boolean;
   page: Page;
@@ -21,6 +32,7 @@ interface UiState {
   setLang(lang: Lang): void;
   setCamera(camera: CameraState): void;
   setVisible(layerId: string, on: boolean): void;
+  setWindow(layerId: string, hours: number): void;
   select(id: string | undefined): void;
   setPanelOpen(open: boolean): void;
   setPage(page: Page): void;
@@ -45,6 +57,7 @@ export const useUi = create<UiState>((set) => ({
   lang: saved.lang ?? 'tr',
   camera: saved.camera ?? DEFAULT_CAMERA,
   visible: saved.visible ?? {},
+  windows: saved.windows ?? {},
   selectedId: undefined,
   panelOpen: typeof window !== 'undefined' ? window.innerWidth > 720 : true,
   page: pageFromHash(),
@@ -52,6 +65,7 @@ export const useUi = create<UiState>((set) => ({
   setLang: (lang) => set({ lang }),
   setCamera: (camera) => set({ camera }),
   setVisible: (layerId, on) => set((s) => ({ visible: { ...s.visible, [layerId]: on } })),
+  setWindow: (layerId, hours) => set((s) => ({ windows: { ...s.windows, [layerId]: hours } })),
   select: (selectedId) => set({ selectedId }),
   setPanelOpen: (panelOpen) => set({ panelOpen }),
   setPage: (page) => {
@@ -63,7 +77,7 @@ export const useUi = create<UiState>((set) => ({
 
 useUi.subscribe((s) => {
   try {
-    localStorage.setItem(SAVED_KEY, JSON.stringify({ view: s.view, lang: s.lang, camera: s.camera, visible: s.visible }));
+    localStorage.setItem(SAVED_KEY, JSON.stringify({ view: s.view, lang: s.lang, camera: s.camera, visible: s.visible, windows: s.windows }));
   } catch {
     // Private mode or storage blocked: the app works without saving.
   }
@@ -160,4 +174,54 @@ export function startLive(): () => void {
     }
   };
   return () => events.close();
+}
+
+// ---- directions ----
+
+export type RouteStatus = 'idle' | 'locating' | 'loading' | 'ready' | 'error';
+
+interface RouteState {
+  status: RouteStatus;
+  mode: TravelMode;
+  /** Destination [lng, lat] and its name. */
+  to?: [number, number];
+  toTitle?: string;
+  from?: [number, number];
+  result?: RouteResult;
+  /** A LocateError code, or the server's message. */
+  error?: string;
+}
+
+export const useRoute = create<RouteState>(() => ({ status: 'idle', mode: 'car' }));
+
+let routeRequest = 0;
+
+/** Directions from where the viewer is to a point on the map. */
+export async function requestRoute(to: [number, number], toTitle: string, mode: TravelMode): Promise<void> {
+  const id = ++routeRequest;
+  useRoute.setState({ status: 'locating', mode, to, toTitle, result: undefined, error: undefined });
+  let from: [number, number];
+  try {
+    from = await locate();
+  } catch (code) {
+    if (id === routeRequest) useRoute.setState({ status: 'error', error: String(code) });
+    return;
+  }
+  if (id !== routeRequest) return;
+  useRoute.setState({ status: 'loading', from });
+  try {
+    const q = `from=${from.join(',')}&to=${to.join(',')}&mode=${mode}`;
+    const res = await fetch(`/api/route?${q}`, { cache: 'no-store' });
+    const body = (await res.json()) as RouteResult | { error: string };
+    if (id !== routeRequest) return;
+    if (!res.ok || 'error' in body) throw new Error('error' in body ? body.error : `HTTP ${res.status}`);
+    useRoute.setState({ status: 'ready', result: body });
+  } catch (err) {
+    if (id === routeRequest) useRoute.setState({ status: 'error', error: err instanceof Error ? err.message : 'server' });
+  }
+}
+
+export function clearRoute(): void {
+  routeRequest++;
+  useRoute.setState({ status: 'idle', to: undefined, toTitle: undefined, from: undefined, result: undefined, error: undefined });
 }

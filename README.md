@@ -6,8 +6,9 @@ Dürbün is a live map of Türkiye that pulls Turkish public sources (AFAD, İBB
 
 **Stage 1 of 5 (foundation).** What works now:
 
-- Four views: regular map, satellite, night, and a 3D globe that keeps the same place when you switch.
-- Three live sources: AFAD earthquakes (last 7 days), İBB traffic notices in İstanbul, and İstanbul's on-duty pharmacies.
+- Four views: regular map, satellite, night, and a 3D globe that keeps the same place when you switch. In 3D, right-drag rotates and tilts, and buttons on the right do the same.
+- Three live sources: AFAD earthquakes (choose the last 1 hour to 7 days), İBB traffic notices in İstanbul, and İstanbul's on-duty pharmacies.
+- Directions to a selected pharmacy by car or on foot, drawn on the map, with a link to Google Maps for turn-by-turn navigation.
 - A source status page (`Kaynak durumu`) that shows whether each source is working, how fresh its data is, and its last error.
 - Turkish first, English with one click.
 
@@ -33,8 +34,21 @@ To change settings, copy `.env.example` to `.env` and edit it. Everything is opt
 | --- | --- |
 | `PORT` | Port to listen on (default 8080). |
 | `HOST` | `127.0.0.1` (default) keeps it to this computer; `0.0.0.0` lets other devices on your network or Tailscale reach it. |
-| `CESIUM_ION_TOKEN` | Free token from <https://ion.cesium.com/signup>. Adds 3D terrain and Google's photorealistic 3D cities (1,000 loads a month on the free plan). |
+| `CESIUM_ION_TOKEN` | Free Cesium ion token (see below). Adds 3D terrain and Google's photorealistic 3D cities. |
 | `DISABLED_SOURCES` | Comma-separated source ids to switch off. |
+
+### 3D terrain and cities (free Cesium ion token)
+
+1. Create a free account at <https://ion.cesium.com/signup>. The free Community plan covers personal, non-commercial use.
+2. Open **Access Tokens** in the ion dashboard and copy the **Default** token.
+3. Put it in `.env` as `CESIUM_ION_TOKEN=...` and restart with `npm start` (no rebuild needed).
+4. If the 3D view says Google's cities didn't load, open **Asset Depot** in ion, find **Google Photorealistic 3D Tiles** and add it to your assets.
+
+The free plan includes 1,000 loads of Google's 3D tiles a month; each time someone opens the 3D view counts as one.
+
+### Directions and your location
+
+Directions start from where you are, which the browser shares only on a secure page: `http://localhost:8080` on the computer running Dürbün works; a plain `http://` address from another device does not (use the Google Maps link there). To compute the route, your start point and the destination are sent to FOSSGIS's public OSRM servers. Car times leave out traffic for now; stage 4 adds İstanbul's live speeds, tolls and fuel.
 
 ## Developing
 
@@ -70,6 +84,7 @@ Dürbün is a private, non-commercial tool. Each source is polled gently, identi
 | Earthquakes | [AFAD](https://deprem.afad.gov.tr/last-earthquakes) event API | 1 min |
 | Traffic notices (İstanbul) | [İBB Ulaşım Yönetim Merkezi](https://uym.ibb.gov.tr/yharita6/) traffic map | 1 min |
 | On-duty pharmacies (İstanbul) | İBB pharmacy service | 30 min |
+| Directions | [FOSSGIS OSRM](https://routing.openstreetmap.de) (OpenStreetMap data) | On request, cached 5 min, at most 20 a minute |
 
 Basemaps: [OpenFreeMap](https://openfreemap.org) (© OpenStreetMap contributors), Esri World Imagery, and CesiumJS for 3D.
 

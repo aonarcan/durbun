@@ -7,11 +7,12 @@ import { ibbPharmacies } from './ibb-pharmacies.ts';
 export const layers: LayerDefinition[] = [
   {
     id: 'earthquakes',
-    name: { tr: 'Depremler (son 7 gün)', en: 'Earthquakes (last 7 days)' },
+    name: { tr: 'Depremler', en: 'Earthquakes' },
     group: 'hazards',
     color: '#d7301f',
     defaultOn: true,
     attribution: 'AFAD',
+    timeWindows: { options: [1, 6, 24, 72, 168], default: 24 },
   },
   {
     id: 'incidents',
