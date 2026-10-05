@@ -87,7 +87,7 @@ export function parseMgmObservations(centres: MgmCentre[], observations: MgmObse
         layer: 'weather-now',
         source: 'mgm-observations',
         title: temp === undefined ? c.il : `${c.il} ${round1(temp)} °C`,
-        kind: 'weather',
+        kind: 'observation',
         ...(temp !== undefined ? { value: round1(temp) } : {}),
         observedAt: new Date(o.veriZamani).toISOString(),
         style: {

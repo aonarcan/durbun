@@ -3,7 +3,7 @@ import { PNG } from 'pngjs';
 import { circlePolygon, distanceKm } from '@durbun/core';
 import { describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.ts';
-import { createCloudTiles, infraredToClouds, tileBounds, wmsUrl } from '../src/clouds.ts';
+import { createCloudTiles, infraredToClouds, mosaicRange, tileBounds, tileOf, wmsUrl } from '../src/clouds.ts';
 import { createHttpClient } from '../src/kit/http.ts';
 import { Scheduler } from '../src/kit/scheduler.ts';
 import type { LayerDefinition, SourceDefinition } from '../src/kit/source.ts';
@@ -150,7 +150,7 @@ describe('cloud tiles', () => {
     expect(x0).toBeCloseTo(-20037508.34 + 37 * 626172.14, 0);
     expect(y1).toBeCloseTo(20037508.34 - 24 * 626172.14, 0);
     expect(wmsUrl(6, 37, 24)).toContain('crs=EPSG:3857');
-    expect(wmsUrl(6, 37, 24)).toContain('layers=msg_fes:ir108');
+    expect(wmsUrl(6, 37, 24)).toContain('/msg_fes/ir108/ows?');
   });
 
   function grey(values: number[]): Buffer {
@@ -165,7 +165,7 @@ describe('cloud tiles', () => {
   }
 
   it('turns warm ground clear and cold cloud tops white', () => {
-    const out = PNG.sync.read(infraredToClouds(grey([40, 105, 145, 185, 250])));
+    const out = PNG.sync.read(infraredToClouds(grey([60, 110, 155, 200, 250])));
     const alpha = [0, 1, 2, 3, 4].map((i) => out.data[i * 4 + 3]);
     expect(alpha[0]).toBe(0);
     expect(alpha[1]).toBe(0);
@@ -176,20 +176,73 @@ describe('cloud tiles', () => {
     expect(out.data[8]).toBe(255);
   });
 
-  it('caches converted tiles for ten minutes', async () => {
-    let calls = 0;
-    let t = 0;
-    const http = createHttpClient('test', async () => {
-      calls += 1;
-      return new Response(new Uint8Array(grey([200])));
+  /** A fake EUMETView: answers any size asked for; grey rises by 10 per 256-pixel column from 110. */
+  function fakeEumetview(fail: () => boolean) {
+    const urls: string[] = [];
+    const http = createHttpClient('test', async (url) => {
+      urls.push(url);
+      if (fail()) return new Response('down', { status: 503 });
+      const q = new URL(url).searchParams;
+      const w = Number(q.get('width'));
+      const h = Number(q.get('height'));
+      const png = new PNG({ width: w, height: h });
+      for (let y = 0; y < h; y++)
+        for (let x = 0; x < w; x++) {
+          const i = (y * w + x) * 4;
+          const v = 110 + 10 * Math.floor(x / 256);
+          png.data[i] = png.data[i + 1] = png.data[i + 2] = v;
+          png.data[i + 3] = 255;
+        }
+      return new Response(new Uint8Array(PNG.sync.write(png)));
     });
+    return { http, urls };
+  }
+  const alphaOf = (png: Buffer) => PNG.sync.read(png).data[3];
+
+  it('covers Türkiye with one picture per zoom level', () => {
+    expect(mosaicRange(6)).toEqual({ x0: 34, y0: 21, nx: 8, ny: 6 });
+    expect(tileOf(6, 29, 41)).toEqual([37, 23]); // İstanbul
+  });
+
+  it('fetches the area around Türkiye once and cuts it into tiles', async () => {
+    const { http, urls } = fakeEumetview(() => false);
+    const tile = createCloudTiles(http, () => 0);
+    const [a, b] = await Promise.all([tile(6, 34, 21), tile(6, 36, 23)]);
+    expect(urls).toHaveLength(1);
+    expect(urls[0]).toContain('width=2048&height=1536');
+    expect(alphaOf(a)).toBe(0); // first column: grey 110, clear
+    expect(alphaOf(b)).toBe(Math.round((20 / 90) * 235)); // third column: grey 130
+    await tile(6, 41, 26);
+    expect(urls).toHaveLength(1);
+  });
+
+  it('fetches tiles elsewhere one by one and caches them for ten minutes', async () => {
+    let t = 0;
+    let down = false;
+    const { http, urls } = fakeEumetview(() => down);
+    const tile = createCloudTiles(http, () => t);
+    await tile(7, 10, 10);
+    await tile(7, 10, 10);
+    expect(urls).toHaveLength(1);
+    expect(urls[0]).toContain('width=256&height=256');
+    t = 11 * 60_000;
+    down = true;
+    // EUMETView is down: the older picture is still served.
+    expect(alphaOf(await tile(7, 10, 10))).toBe(0);
+    expect(urls).toHaveLength(3); // one try and one retry
+  });
+
+  it('refreshes only the zoom levels in use', async () => {
+    let t = 0;
+    const { http, urls } = fakeEumetview(() => false);
     const tile = createCloudTiles(http, () => t);
     await tile(5, 18, 12);
-    await tile(5, 18, 12);
-    expect(calls).toBe(1);
     t = 11 * 60_000;
-    await tile(5, 18, 12);
-    expect(calls).toBe(2);
+    await tile.refresh();
+    expect(urls).toHaveLength(2);
+    t = 2 * 3600_000;
+    await tile.refresh();
+    expect(urls).toHaveLength(2);
   });
 });
 

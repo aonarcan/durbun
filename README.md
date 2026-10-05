@@ -4,11 +4,12 @@ Türkiye için canlı bir harita: trafik, afetler, ulaşım ve daha fazlası, te
 
 Dürbün is a live map of Türkiye that pulls Turkish public sources (AFAD, İBB and more to come) into one 2D and 3D view. It runs on your own computer and is meant for you and a few friends.
 
-**Stage 1 of 5 (foundation).** What works now:
+**Stage 2a of 5 (earthquakes and weather).** What works now:
 
 - Four views: regular map, satellite, night, and a 3D globe that keeps the same place when you switch. In 3D, right-drag rotates and tilts, and buttons on the right do the same.
-- Three live sources: AFAD earthquakes (choose the last 1 hour to 7 days), İBB traffic notices in İstanbul, and İstanbul's on-duty pharmacies.
-- Directions to a selected pharmacy by car or on foot, drawn on the map, with a link to Google Maps for turn-by-turn navigation.
+- **Earthquakes** from AFAD: pick the last 1 hour to 7 days and a minimum magnitude (all, 2+, 3+, 4+, 5+). Click one for the **earthquake view**: distance rings, the aftershocks recorded since, the provinces within reach, other events nearby, a link to AFAD's page for the event, and a note when it may itself be an aftershock of a bigger one. A strong earthquake (M4.5+ in the last 6 hours) puts a banner at the top of the map.
+- **Weather**: MGM's yellow, orange and red warnings on province outlines; current temperature and wind for all 81 province centres; the last two hours of rain radar with a play button; and satellite clouds from Meteosat.
+- İBB traffic notices in İstanbul, İstanbul's on-duty pharmacies, and directions to a pharmacy by car or on foot.
 - A source status page (`Kaynak durumu`) that shows whether each source is working, how fresh its data is, and its last error.
 - Turkish first, English with one click.
 
@@ -57,7 +58,7 @@ Directions start from where you are, which the browser shares only on a secure p
 
 ```sh
 npm run dev        # server on :8080 plus the web app with hot reload on http://localhost:5173
-npm test           # unit tests (parsers, scheduler, API, camera maths)
+npm test           # unit tests (parsers, scheduler, API, camera maths, earthquake and weather helpers)
 npm run typecheck  # TypeScript across all packages
 ```
 
@@ -78,6 +79,8 @@ apps/web         Vite + React app: MapLibre for 2D, CesiumJS for 3D
 
 The scheduler handles timeouts (30 s by default), backs off after failures (doubling up to 30 minutes) and keeps the last good data on the map while a source is down.
 
+A source can also return image tiles instead of features (`{ raster: { frames, tileSize, maxzoom, opacity } }`), as the rain radar does; the map then shows the frames as an image layer, with a play button when there is more than one.
+
 ## Data sources and fair use
 
 Dürbün is a private, non-commercial tool. Each source is polled gently, identifies itself with a user agent, and is credited on the map.
@@ -87,7 +90,18 @@ Dürbün is a private, non-commercial tool. Each source is polled gently, identi
 | Earthquakes | [AFAD](https://deprem.afad.gov.tr/last-earthquakes) event API | 1 min |
 | Traffic notices (İstanbul) | [İBB Ulaşım Yönetim Merkezi](https://uym.ibb.gov.tr/yharita6/) traffic map | 1 min |
 | On-duty pharmacies (İstanbul) | İBB pharmacy service | 30 min |
+| Weather warnings | [MGM Meteouyarı](https://www.mgm.gov.tr/meteouyari/) (today and tomorrow) | 10 min |
+| Current weather, 81 province centres | [MGM](https://www.mgm.gov.tr/) latest observations | 10 min |
+| Rain radar | [RainViewer](https://www.rainviewer.com/api.html) public API (free tiles stop at zoom 7, so the radar gets blurry when you zoom in close) | 5 min |
+| Clouds | [EUMETSAT EUMETView](https://view.eumetsat.int/) Meteosat 10.8 µm infrared, turned into white clouds on the server; one picture per zoom level covers Türkiye and its neighbours | Every 10 min, only while someone has the layer on |
+| Province outlines | [Natural Earth](https://www.naturalearthdata.com/) admin-1 boundaries (public domain) | Bundled |
 | Directions | [FOSSGIS OSRM](https://routing.openstreetmap.de) (OpenStreetMap data) | On request, cached 5 min, at most 20 a minute |
+
+A few notes on reading the weather and earthquake layers:
+
+- Warnings that have already started are drawn stronger than those still to come; expired ones disappear. A province is coloured by the highest level any of its districts has.
+- The cloud layer is an infrared picture, so it works day and night. On very cold winter nights, frozen ground in the east can show up as thin cloud.
+- Earthquake rings show distance from the epicentre, not shaking or damage. Aftershocks are counted inside the Gardner–Knopoff distance for the magnitude (about 30 km for M4, 53 km for M6).
 
 Basemaps: [OpenFreeMap](https://openfreemap.org) (© OpenStreetMap contributors), Esri World Imagery, and CesiumJS for 3D.
 

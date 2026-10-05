@@ -1,15 +1,16 @@
 import { LAYER_GROUP_NAMES, type LayerGroup, type LayerSummary } from '@durbun/core';
 import { t } from '../i18n.ts';
-import { shownFeatures, windowFor, windowLabel } from '../lib/filters.ts';
-import { timeAgo } from '../lib/format.ts';
+import { minValueFor, minValueLabel, shownFeatures, windowFor, windowLabel } from '../lib/filters.ts';
+import { clockTime, timeAgo } from '../lib/format.ts';
 import { useNow } from '../lib/useNow.ts';
-import { isVisible, useData, useUi } from '../state.ts';
+import { isVisible, useData, useFilters, useUi } from '../state.ts';
 
 export function LayerPanel() {
   const layers = useData((s) => s.layers);
   const sources = useData((s) => s.sources);
   const collections = useData((s) => s.collections);
-  const { lang, visible, setVisible, windows, setWindow, panelOpen, setPage } = useUi();
+  const { lang, visible, setVisible, windows, setWindow, minValues, setMinValue, panelOpen, setPage } = useUi();
+  const filters = useFilters();
   const now = useNow(15_000);
 
   const groups = new Map<LayerGroup, LayerSummary[]>();
@@ -17,6 +18,17 @@ export function LayerPanel() {
 
   const failing = (l: LayerSummary) =>
     sources.some((s) => s.layer === l.id && (s.status === 'failing' || s.status === 'degraded'));
+
+  const meta = (l: LayerSummary): string => {
+    if (l.raster) {
+      const frames = l.raster.frames;
+      const newest = frames[frames.length - 1]?.time;
+      if (frames.length > 1 && newest) return `${t(lang, 'latestImage')} ${clockTime(newest, lang)} · ${timeAgo(newest, lang, now)}`;
+      return t(lang, 'liveImagery');
+    }
+    if (!l.updatedAt) return t(lang, 'noDataYet');
+    return `${shownFeatures(l, collections[l.id], filters, now).length} ${t(lang, 'items')} · ${timeAgo(l.updatedAt, lang, now)}`;
+  };
 
   return (
     <aside className={`panel layer-panel ${panelOpen ? 'open' : ''}`} aria-label={t(lang, 'layers')}>
@@ -29,15 +41,13 @@ export function LayerPanel() {
               <li key={l.id}>
                 <label className="layer-row">
                   <input type="checkbox" checked={isVisible(l, visible)} onChange={(e) => setVisible(l.id, e.target.checked)} />
-                  <span className="swatch" style={{ background: l.color }}>
+                  <span className={`swatch ${l.shape === 'areas' ? 'area' : ''} ${l.raster ? 'image' : ''}`} style={{ background: l.color }}>
                     {l.glyph}
                   </span>
                   <span className="layer-text">
                     <span className="layer-name">{l.name[lang]}</span>
                     <span className="layer-meta">
-                      {l.updatedAt
-                        ? `${shownFeatures(l, collections[l.id], windows, now).length} ${t(lang, 'items')} · ${timeAgo(l.updatedAt, lang, now)}`
-                        : t(lang, 'noDataYet')}
+                      {meta(l)}
                       {failing(l) && (
                         <span className="warn" title={t(lang, 'sources')}>
                           {' '}
@@ -50,25 +60,45 @@ export function LayerPanel() {
                     </span>
                   </span>
                 </label>
-                {l.timeWindows && (
+                {l.timeWindows && isVisible(l, visible) && (
                   <div className="window-picker">
                     <span className="muted">{t(lang, 'last')}</span>
                     <div className="segmented small" role="radiogroup" aria-label={t(lang, 'timeWindow')}>
-                    {l.timeWindows.options.map((h) => (
-                      <button
-                        key={h}
-                        type="button"
-                        role="radio"
-                        aria-checked={windowFor(l, windows) === h}
-                        className={windowFor(l, windows) === h ? 'active' : ''}
-                        onClick={() => setWindow(l.id, h)}
-                      >
-                        {windowLabel(h, lang)}
-                      </button>
-                    ))}
+                      {l.timeWindows.options.map((h) => (
+                        <button
+                          key={h}
+                          type="button"
+                          role="radio"
+                          aria-checked={windowFor(l, windows) === h}
+                          className={windowFor(l, windows) === h ? 'active' : ''}
+                          onClick={() => setWindow(l.id, h)}
+                        >
+                          {windowLabel(h, lang)}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 )}
+                {l.minValue && isVisible(l, visible) && (
+                  <div className="window-picker">
+                    <span className="muted">{l.minValue.label}</span>
+                    <div className="segmented small" role="radiogroup" aria-label={t(lang, 'minMagnitude')}>
+                      {l.minValue.options.map((v) => (
+                        <button
+                          key={v}
+                          type="button"
+                          role="radio"
+                          aria-checked={minValueFor(l, minValues) === v}
+                          className={minValueFor(l, minValues) === v ? 'active' : ''}
+                          onClick={() => setMinValue(l.id, v)}
+                        >
+                          {minValueLabel(v, lang)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {l.shape === 'areas' && isVisible(l, visible) && <WarningLegend lang={lang} />}
               </li>
             ))}
           </ul>
@@ -78,5 +108,22 @@ export function LayerPanel() {
         {t(lang, 'sources')} →
       </button>
     </aside>
+  );
+}
+
+function WarningLegend({ lang }: { lang: 'tr' | 'en' }) {
+  return (
+    <div className="legend">
+      <span>
+        <i className="legend-yellow" /> {t(lang, 'levelYellow')}
+      </span>
+      <span>
+        <i className="legend-orange" /> {t(lang, 'levelOrange')}
+      </span>
+      <span>
+        <i className="legend-red" /> {t(lang, 'levelRed')}
+      </span>
+      <span className="muted">{t(lang, 'fadedIsLater')}</span>
+    </div>
   );
 }

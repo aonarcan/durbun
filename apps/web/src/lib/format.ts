@@ -25,6 +25,14 @@ export function dateTime(iso: string | undefined, lang: Lang): string {
   }).format(new Date(iso));
 }
 
+/** "21:20" in Türkiye's time zone. */
+export function clockTime(iso: string | undefined, lang: Lang): string {
+  if (!iso) return '';
+  return new Intl.DateTimeFormat(locale(lang), { timeZone: 'Europe/Istanbul', hour: '2-digit', minute: '2-digit' }).format(
+    new Date(iso),
+  );
+}
+
 export function duration(ms: number | undefined): string {
   if (ms === undefined) return '';
   return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;

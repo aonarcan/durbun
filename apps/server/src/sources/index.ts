@@ -25,6 +25,7 @@ export const layers: LayerDefinition[] = [
     color: '#f5a623',
     defaultOn: true,
     attribution: 'MGM',
+    shape: 'areas',
   },
   {
     id: 'weather-now',
@@ -49,7 +50,7 @@ export const layers: LayerDefinition[] = [
     color: '#9aa3b5',
     defaultOn: false,
     attribution: 'EUMETSAT (Meteosat)',
-    raster: { frames: [{ url: '/api/tiles/clouds/{z}/{x}/{y}' }], tileSize: 256, maxzoom: 7, opacity: 0.9 },
+    raster: { frames: [{ url: '/api/tiles/clouds/{z}/{x}/{y}' }], tileSize: 256, maxzoom: 6, opacity: 0.9 },
   },
   {
     id: 'incidents',

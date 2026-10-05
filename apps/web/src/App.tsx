@@ -2,6 +2,8 @@ import { lazy, Suspense, useEffect } from 'react';
 import { InfoPanel } from './components/InfoPanel.tsx';
 import { LayerPanel } from './components/LayerPanel.tsx';
 import { MapView } from './components/MapView.tsx';
+import { QuakeBanner } from './components/QuakeBanner.tsx';
+import { RadarPlayer } from './components/RadarPlayer.tsx';
 import { SourcesPage } from './components/SourcesPage.tsx';
 import { TopBar } from './components/TopBar.tsx';
 import { startLive, useUi } from './state.ts';
@@ -35,6 +37,8 @@ export function App() {
           )}
           <LayerPanel />
           <InfoPanel />
+          <QuakeBanner />
+          <RadarPlayer />
         </div>
       )}
     </div>

@@ -24,6 +24,8 @@ export interface LayerInfo {
   minValue?: { label: string; options: number[]; default: number };
   /** Drawn as image tiles instead of features (radar, clouds). */
   raster?: RasterInfo;
+  /** "areas" for layers of polygons (drawn as tinted outlines); points otherwise. */
+  shape?: 'points' | 'areas';
 }
 
 /** Tiles for an image layer. Several frames make an animation (e.g. the last two hours of radar). */
