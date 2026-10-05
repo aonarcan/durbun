@@ -4,6 +4,7 @@ import { config } from './config.ts';
 import { createHttpClient } from './kit/http.ts';
 import { Scheduler } from './kit/scheduler.ts';
 import { Store } from './kit/store.ts';
+import { createCloudTiles } from './clouds.ts';
 import { createRouter } from './routing.ts';
 import { layers, sources } from './sources/index.ts';
 
@@ -15,6 +16,7 @@ const app = await buildApp({
   cesiumIonToken: config.cesiumIonToken,
   webDist: config.webDist,
   router: createRouter(http),
+  cloudTile: createCloudTiles(http),
 });
 
 await app.listen({ port: config.port, host: config.host });

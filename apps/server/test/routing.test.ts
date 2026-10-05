@@ -46,6 +46,9 @@ describe('router', () => {
       async getText() {
         return '';
       },
+      async getBuffer() {
+        return Buffer.alloc(0);
+      },
       async getJson<T>() {
         h.calls += 1;
         return osrm as T;

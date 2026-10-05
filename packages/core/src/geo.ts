@@ -21,7 +21,12 @@ export interface PolygonGeometry {
   coordinates: Position[][];
 }
 
-export type Geometry = PointGeometry | LineStringGeometry | PolygonGeometry;
+export interface MultiPolygonGeometry {
+  type: 'MultiPolygon';
+  coordinates: Position[][][];
+}
+
+export type Geometry = PointGeometry | LineStringGeometry | PolygonGeometry | MultiPolygonGeometry;
 
 /** Properties every Dürbün feature carries, whatever its source. */
 export interface FeatureProps {
@@ -46,6 +51,8 @@ export interface FeatureProps {
   details?: Record<string, string | number | boolean | null>;
   /** Numeric value used for styling, e.g. earthquake magnitude. */
   value?: number;
+  /** Extra flat values the map styles with (e.g. wind direction for an arrow). */
+  style?: Record<string, number | string>;
 }
 
 export interface Feature<G extends Geometry = Geometry> {
@@ -85,4 +92,31 @@ export function isInTurkey(lng: number, lat: number): boolean {
     lat >= TURKEY_BOUNDS.minLat &&
     lat <= TURKEY_BOUNDS.maxLat
   );
+}
+
+const EARTH_RADIUS_KM = 6371.0088;
+
+/** Great-circle distance in kilometres. */
+export function distanceKm(a: [number, number], b: [number, number]): number {
+  const rad = Math.PI / 180;
+  const dLat = (b[1] - a[1]) * rad;
+  const dLng = (b[0] - a[0]) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[1] * rad) * Math.cos(b[1] * rad) * Math.sin(dLng / 2) ** 2;
+  return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/** A circle as a polygon ring of n points, radius in kilometres. */
+export function circlePolygon(centre: [number, number], radiusKm: number, n = 96): PolygonGeometry {
+  const rad = Math.PI / 180;
+  const latR = centre[1] * rad;
+  const lngR = centre[0] * rad;
+  const d = radiusKm / EARTH_RADIUS_KM;
+  const ring: Position[] = [];
+  for (let i = 0; i <= n; i++) {
+    const brg = (i / n) * 2 * Math.PI;
+    const lat = Math.asin(Math.sin(latR) * Math.cos(d) + Math.cos(latR) * Math.sin(d) * Math.cos(brg));
+    const lng = lngR + Math.atan2(Math.sin(brg) * Math.sin(d) * Math.cos(latR), Math.cos(d) - Math.sin(latR) * Math.sin(lat));
+    ring.push([Number((lng / rad).toFixed(5)), Number((lat / rad).toFixed(5))]);
+  }
+  return { type: 'Polygon', coordinates: [ring] };
 }
