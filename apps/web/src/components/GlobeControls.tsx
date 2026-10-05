@@ -1,19 +1,12 @@
 import * as Cesium from 'cesium';
 import { useEffect, useState } from 'react';
 import { t } from '../i18n.ts';
+import { groundAtCentre } from '../lib/globePick.ts';
 import { useUi } from '../state.ts';
 
 const MIN_PITCH = Cesium.Math.toRadians(-90);
 const MAX_PITCH = Cesium.Math.toRadians(-8);
 const HINT_KEY = 'durbun.hint3d.v1';
-
-/** The point on the ground at the centre of the screen: what the camera orbits around. */
-function centreTarget(viewer: Cesium.Viewer): Cesium.Cartesian3 | undefined {
-  const { scene, camera, canvas } = viewer;
-  const centre = new Cesium.Cartesian2(canvas.clientWidth / 2, canvas.clientHeight / 2);
-  const ray = camera.getPickRay(centre);
-  return (ray && scene.globe.pick(ray, scene)) ?? camera.pickEllipsoid(centre) ?? undefined;
-}
 
 interface OrbitChange {
   heading?: number;
@@ -25,7 +18,7 @@ interface OrbitChange {
 
 /** Moves the camera around the centre point: rotate, tilt or zoom, with a short animation. */
 export function orbit(viewer: Cesium.Viewer, change: OrbitChange): void {
-  const target = centreTarget(viewer);
+  const target = groundAtCentre(viewer);
   const { camera } = viewer;
   if (!target) {
     if (change.rangeFactor) camera.zoomIn((1 - change.rangeFactor) * camera.positionCartographic.height);

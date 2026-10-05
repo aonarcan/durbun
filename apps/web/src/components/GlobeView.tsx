@@ -14,6 +14,7 @@ import {
   type CameraState,
 } from '../lib/camera.ts';
 import { shownFeatures } from '../lib/filters.ts';
+import { groundAtCentre } from '../lib/globePick.ts';
 import { KIND_COLORS, lineBounds, ROUTE_COLORS } from '../lib/mapLayers.ts';
 import { isVisible, useData, useRoute, useUi } from '../state.ts';
 import { GlobeControls, setUpMouse } from './GlobeControls.tsx';
@@ -48,10 +49,8 @@ function applyCamera(viewer: Cesium.Viewer, c: CameraState): void {
 
 /** Reads the 3D camera back as a 2D map view (centre = what the screen centre looks at). */
 function readCamera(viewer: Cesium.Viewer): CameraState | undefined {
-  const { camera, scene } = viewer;
-  const centre = new Cesium.Cartesian2(viewer.canvas.clientWidth / 2, viewer.canvas.clientHeight / 2);
-  const ray = camera.getPickRay(centre);
-  const hit = ray ? scene.globe.pick(ray, scene) : undefined;
+  const { camera } = viewer;
+  const hit = groundAtCentre(viewer);
   const heading = Cesium.Math.toDegrees(camera.heading);
   const pitch = mapPitch(Cesium.Math.toDegrees(camera.pitch));
   if (hit) {
@@ -169,6 +168,9 @@ export default function GlobeView() {
           const tiles = await Cesium.createGooglePhotorealistic3DTileset({ onlyUsingWithGoogleGeocoder: true });
           if (!cancelled) {
             viewer.scene.primitives.add(tiles);
+            // Google's tiles carry their own terrain and imagery. Leaving the globe on
+            // hides them under Cesium's terrain except where it dips lower.
+            viewer.scene.globe.show = false;
             setBuildings('google');
           }
         } catch {
