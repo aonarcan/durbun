@@ -111,6 +111,9 @@ function kindColor(colors: Record<string, string>, fallback: string): Expression
   return ['match', ['get', 'kind'], ...pairs, fallback] as unknown as ExpressionSpecification;
 }
 
+/** Earthquake marker radius in pixels by magnitude. */
+const QUAKE_RADIUS = ['interpolate', ['linear'], ['get', 'value'], 0, 2.5, 2, 4, 3, 7, 4, 11, 5, 16, 6, 22, 7, 30] as unknown as ExpressionSpecification;
+
 const tempExpression = [
   'case',
   ['has', 'value'],
@@ -150,7 +153,7 @@ function specsFor(layer: LayerSummary): LayerSpecification[] {
         // Newest on top.
         layout: { 'circle-sort-key': ['-', 0, ['get', 'ageHours']] },
         paint: {
-          'circle-radius': ['interpolate', ['linear'], ['get', 'value'], 0, 2.5, 2, 4, 3, 7, 4, 11, 5, 16, 6, 22, 7, 30],
+          'circle-radius': QUAKE_RADIUS,
           'circle-color': ['step', ['get', 'ageHours'], ...QUAKE_AGE_COLORS.flat().slice(1)] as unknown as ExpressionSpecification,
           'circle-opacity': ['step', ['get', 'ageHours'], 0.95, 24, 0.8, 72, 0.6],
           'circle-stroke-color': '#ffffff',
@@ -432,7 +435,7 @@ export function focusFeatures(focus: QuakeFocus | undefined): FeatureCollection 
         // The ring's first point is due north of the epicentre.
         f({ type: 'Point', coordinates: r.geometry.coordinates[0]![0] }, { part: 'ring-label', label: `${r.km} km` }),
       ]),
-      ...focus.aftershocks.map((a) => f(a.geometry, { part: 'aftershock' })),
+      ...focus.aftershocks.map((a) => f(a.geometry, { part: 'aftershock', value: a.properties.value ?? 0 })),
       f({ type: 'Point', coordinates: focus.centre }, { part: 'main', value: focus.magnitude }),
     ],
   };
@@ -470,13 +473,22 @@ export function syncFocus(map: MapLibreMap, focus: QuakeFocus | undefined): void
     layout: { 'text-field': ['get', 'label'], 'text-font': FONT_BOLD, 'text-size': 11, 'text-allow-overlap': true },
     paint: { 'text-color': FOCUS_COLOR, 'text-halo-color': '#ffffff', 'text-halo-width': 2 },
   });
-  map.addLayer({
-    id: `${FOCUS_SOURCE}-aftershock`,
-    type: 'circle',
-    source: FOCUS_SOURCE,
-    filter: part('aftershock'),
-    paint: { 'circle-radius': 8, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': AFTERSHOCK_COLOR, 'circle-stroke-width': 2 },
-  });
+  // A yellow halo just under each aftershock's own marker, so clusters stay readable.
+  const quakeCircles = `${sourceId('earthquakes')}-circle`;
+  map.addLayer(
+    {
+      id: `${FOCUS_SOURCE}-aftershock`,
+      type: 'circle',
+      source: FOCUS_SOURCE,
+      filter: part('aftershock'),
+      paint: {
+        'circle-radius': ['+', QUAKE_RADIUS, 3] as unknown as ExpressionSpecification,
+        'circle-color': AFTERSHOCK_COLOR,
+        'circle-opacity': 0.9,
+      },
+    },
+    map.getLayer(quakeCircles) ? quakeCircles : undefined,
+  );
   map.addLayer({
     id: `${FOCUS_SOURCE}-main`,
     type: 'circle',

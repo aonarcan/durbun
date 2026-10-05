@@ -505,7 +505,8 @@ export default function GlobeView() {
           position: Cesium.Cartesian3.fromDegrees(a.geometry.coordinates[0], a.geometry.coordinates[1]),
           point: {
             ...GROUND,
-            pixelSize: 14,
+            // A thin ring just outside the aftershock's own marker.
+            pixelSize: Math.max(5, Math.min(30, 4 + (a.properties.value ?? 0) * 3.5)) + 6,
             color: Cesium.Color.TRANSPARENT,
             outlineColor: Cesium.Color.fromCssColorString(AFTERSHOCK_COLOR),
             outlineWidth: 2,
