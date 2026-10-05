@@ -117,6 +117,20 @@ function pointSize(layer: LayerSummary, f: Feature): number {
 
 type BuildingsStatus = 'off' | 'loading' | 'osm' | 'google' | 'google-failed' | 'failed';
 
+/**
+ * Lights the scene from the camera instead of the real sun. With the default
+ * sunlight, buildings turn dark brown at night and on north faces; a light
+ * that follows the view keeps them readable at any hour. (The planned
+ * sun-and-shadow tool will switch back to the true sun position.)
+ */
+function lightFromCamera(viewer: Cesium.Viewer): void {
+  const light = new Cesium.DirectionalLight({ direction: Cesium.Cartesian3.clone(viewer.camera.directionWC), intensity: 2.2 });
+  viewer.scene.light = light;
+  viewer.scene.preRender.addEventListener((scene) => {
+    Cesium.Cartesian3.clone(scene.camera.directionWC, light.direction);
+  });
+}
+
 /** OSM buildings in a warm light grey, so they read against the satellite imagery. */
 const OSM_STYLE = new Cesium.Cesium3DTileStyle({ color: "color('#e4dfd6')" });
 
@@ -170,6 +184,7 @@ export default function GlobeView() {
       });
       viewerRef.current = viewer;
       setUpMouse(viewer);
+      lightFromCamera(viewer);
       viewer.scene.globe.depthTestAgainstTerrain = Boolean(cesiumIonToken);
       applyCamera(viewer, useUi.getState().camera);
 
