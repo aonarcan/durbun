@@ -13,6 +13,7 @@ import { DEFAULT_CAMERA, type CameraState } from './lib/camera.ts';
 import { locate } from './lib/locate.ts';
 
 export type ViewMode = 'map' | 'satellite' | 'dark' | '3d';
+export type Buildings3d = 'osm' | 'google' | 'off';
 export type Page = 'map' | 'sources';
 
 // ---- what the viewer chose (kept in this browser between visits) ----
@@ -25,6 +26,8 @@ interface UiState {
   visible: Record<string, boolean>;
   /** Layer id → chosen time window in hours, for layers that offer one. */
   windows: Record<string, number>;
+  /** Which 3D buildings the 3D view shows (needs a Cesium ion token). */
+  buildings3d: Buildings3d;
   selectedId: string | undefined;
   panelOpen: boolean;
   page: Page;
@@ -33,6 +36,7 @@ interface UiState {
   setCamera(camera: CameraState): void;
   setVisible(layerId: string, on: boolean): void;
   setWindow(layerId: string, hours: number): void;
+  setBuildings3d(mode: Buildings3d): void;
   select(id: string | undefined): void;
   setPanelOpen(open: boolean): void;
   setPage(page: Page): void;
@@ -58,6 +62,7 @@ export const useUi = create<UiState>((set) => ({
   camera: saved.camera ?? DEFAULT_CAMERA,
   visible: saved.visible ?? {},
   windows: saved.windows ?? {},
+  buildings3d: saved.buildings3d ?? 'osm',
   selectedId: undefined,
   panelOpen: typeof window !== 'undefined' ? window.innerWidth > 720 : true,
   page: pageFromHash(),
@@ -66,6 +71,7 @@ export const useUi = create<UiState>((set) => ({
   setCamera: (camera) => set({ camera }),
   setVisible: (layerId, on) => set((s) => ({ visible: { ...s.visible, [layerId]: on } })),
   setWindow: (layerId, hours) => set((s) => ({ windows: { ...s.windows, [layerId]: hours } })),
+  setBuildings3d: (buildings3d) => set({ buildings3d }),
   select: (selectedId) => set({ selectedId }),
   setPanelOpen: (panelOpen) => set({ panelOpen }),
   setPage: (page) => {
@@ -77,7 +83,15 @@ export const useUi = create<UiState>((set) => ({
 
 useUi.subscribe((s) => {
   try {
-    localStorage.setItem(SAVED_KEY, JSON.stringify({ view: s.view, lang: s.lang, camera: s.camera, visible: s.visible, windows: s.windows }));
+    const saved = {
+      view: s.view,
+      lang: s.lang,
+      camera: s.camera,
+      visible: s.visible,
+      windows: s.windows,
+      buildings3d: s.buildings3d,
+    };
+    localStorage.setItem(SAVED_KEY, JSON.stringify(saved));
   } catch {
     // Private mode or storage blocked: the app works without saving.
   }

@@ -2,7 +2,7 @@ import * as Cesium from 'cesium';
 import { useEffect, useState } from 'react';
 import { t } from '../i18n.ts';
 import { groundAtCentre } from '../lib/globePick.ts';
-import { useUi } from '../state.ts';
+import { useUi, type Buildings3d } from '../state.ts';
 
 const MIN_PITCH = Cesium.Math.toRadians(-90);
 const MAX_PITCH = Cesium.Math.toRadians(-8);
@@ -61,8 +61,15 @@ function readHintDismissed(): boolean {
 }
 
 /** On-screen buttons for the 3D camera, plus a one-time hint about the mouse. */
-export function GlobeControls({ viewer }: { viewer: Cesium.Viewer }) {
+export function GlobeControls({ viewer, buildingsAvailable }: { viewer: Cesium.Viewer; buildingsAvailable: boolean }) {
   const lang = useUi((s) => s.lang);
+  const buildings3d = useUi((s) => s.buildings3d);
+  const setBuildings3d = useUi((s) => s.setBuildings3d);
+  const buildingOptions: { id: Buildings3d; label: string }[] = [
+    { id: 'osm', label: t(lang, 'buildingsOsm') },
+    { id: 'google', label: t(lang, 'buildingsGoogle') },
+    { id: 'off', label: t(lang, 'buildingsOff') },
+  ];
   const [heading, setHeading] = useState(0);
   const [hintOpen, setHintOpen] = useState(() => !readHintDismissed());
 
@@ -114,6 +121,25 @@ export function GlobeControls({ viewer }: { viewer: Cesium.Viewer }) {
           </button>
         ))}
       </div>
+      {buildingsAvailable && (
+        <div className="globe-buildings">
+          <span>{t(lang, 'buildings3d')}</span>
+          <div className="segmented small" role="radiogroup" aria-label={t(lang, 'buildings3d')}>
+            {buildingOptions.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                role="radio"
+                aria-checked={buildings3d === o.id}
+                className={buildings3d === o.id ? 'active' : ''}
+                onClick={() => setBuildings3d(o.id)}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {hintOpen && (
         <div className="globe-help" role="note">
           <span>{t(lang, 'globeHelp')}</span>

@@ -115,14 +115,25 @@ function pointSize(layer: LayerSummary, f: Feature): number {
   return layer.glyph ? 14 : 11;
 }
 
-/** The 3D globe: Esri imagery, plus terrain and photorealistic cities when a Cesium ion token is set. */
+type BuildingsStatus = 'off' | 'loading' | 'osm' | 'google' | 'google-failed' | 'failed';
+
+/** OSM buildings in a warm light grey, so they read against the satellite imagery. */
+const OSM_STYLE = new Cesium.Cesium3DTileStyle({ color: "color('#e4dfd6')" });
+
+/**
+ * The 3D globe: Esri imagery, plus terrain and 3D buildings when a Cesium ion
+ * token is set. OSM buildings are the default because Google's photorealistic
+ * models don't cover Türkiye (its cities there are flat imagery on terrain).
+ */
 export default function GlobeView() {
   const container = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<Cesium.Viewer | null>(null);
   const sourcesRef = useRef(new Map<string, Cesium.CustomDataSource>());
   const [hasToken, setHasToken] = useState<boolean | undefined>(undefined);
   const [ready, setReady] = useState(false);
-  const [buildings, setBuildings] = useState<'google' | 'osm' | 'none'>('none');
+  const [buildings, setBuildings] = useState<BuildingsStatus>('off');
+  const tilesetRef = useRef<Cesium.Cesium3DTileset | undefined>(undefined);
+  const buildingsMode = useUi((s) => s.buildings3d);
 
   const layers = useData((s) => s.layers);
   const collections = useData((s) => s.collections);
@@ -161,30 +172,6 @@ export default function GlobeView() {
       setUpMouse(viewer);
       viewer.scene.globe.depthTestAgainstTerrain = Boolean(cesiumIonToken);
       applyCamera(viewer, useUi.getState().camera);
-
-      if (cesiumIonToken) {
-        try {
-          // Dürbün has no search box, so no other geocoder is used alongside Google's tiles.
-          const tiles = await Cesium.createGooglePhotorealistic3DTileset({ onlyUsingWithGoogleGeocoder: true });
-          if (!cancelled) {
-            viewer.scene.primitives.add(tiles);
-            // Google's tiles carry their own terrain and imagery. Leaving the globe on
-            // hides them under Cesium's terrain except where it dips lower.
-            viewer.scene.globe.show = false;
-            setBuildings('google');
-          }
-        } catch {
-          try {
-            const osm = await Cesium.createOsmBuildingsAsync();
-            if (!cancelled) {
-              viewer.scene.primitives.add(osm);
-              setBuildings('osm');
-            }
-          } catch {
-            // Terrain and imagery still work without buildings.
-          }
-        }
-      }
 
       viewer.camera.moveEnd.addEventListener(() => {
         const c = viewer && readCamera(viewer);
@@ -258,6 +245,53 @@ export default function GlobeView() {
     viewer.scene.requestRender();
   }, [layers, collections, visible, windows, ready]);
 
+  // 3D buildings: OSM (default), Google's photorealistic tiles, or none.
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer || !ready || !hasToken) return;
+    let cancelled = false;
+    if (tilesetRef.current) viewer.scene.primitives.remove(tilesetRef.current);
+    tilesetRef.current = undefined;
+    viewer.scene.globe.show = true;
+
+    const show = (tileset: Cesium.Cesium3DTileset, status: BuildingsStatus) => {
+      if (cancelled || viewer.isDestroyed()) {
+        tileset.destroy();
+        return;
+      }
+      viewer.scene.primitives.add(tileset);
+      tilesetRef.current = tileset;
+      // Google's tiles carry their own terrain and imagery; the globe would cover them.
+      viewer.scene.globe.show = status !== 'google';
+      setBuildings(status);
+      viewer.scene.requestRender();
+    };
+    const osm = async (status: BuildingsStatus) => {
+      try {
+        show(await Cesium.createOsmBuildingsAsync({ style: OSM_STYLE }), status);
+      } catch {
+        if (!cancelled) setBuildings('failed');
+      }
+    };
+
+    if (buildingsMode === 'off') {
+      setBuildings('off');
+      viewer.scene.requestRender();
+    } else if (buildingsMode === 'google') {
+      setBuildings('loading');
+      // Dürbün has no search box, so no other geocoder is used alongside Google's tiles.
+      Cesium.createGooglePhotorealistic3DTileset({ onlyUsingWithGoogleGeocoder: true })
+        .then((t) => show(t, 'google'))
+        .catch(() => osm('google-failed'));
+    } else {
+      setBuildings('loading');
+      void osm('osm');
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, hasToken, buildingsMode]);
+
   // The route: a line on the ground from where you are to the chosen place.
   useEffect(() => {
     const viewer = viewerRef.current;
@@ -322,9 +356,10 @@ export default function GlobeView() {
   return (
     <div className="globe-wrap">
       <div ref={container} className="map" aria-label="3B harita" />
-      {ready && viewerRef.current && <GlobeControls viewer={viewerRef.current} />}
+      {ready && viewerRef.current && <GlobeControls viewer={viewerRef.current} buildingsAvailable={Boolean(hasToken)} />}
       {hasToken === false && <div className="globe-hint">{t(lang, 'globeNoToken')}</div>}
-      {hasToken && buildings === 'osm' && <div className="globe-hint">{t(lang, 'globeOsmFallback')}</div>}
+      {hasToken && buildings === 'google' && <div className="globe-hint">{t(lang, 'googleFlatInTurkey')}</div>}
+      {hasToken && buildings === 'google-failed' && <div className="globe-hint">{t(lang, 'globeOsmFallback')}</div>}
     </div>
   );
 }

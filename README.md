@@ -34,17 +34,20 @@ To change settings, copy `.env.example` to `.env` and edit it. Everything is opt
 | --- | --- |
 | `PORT` | Port to listen on (default 8080). |
 | `HOST` | `127.0.0.1` (default) keeps it to this computer; `0.0.0.0` lets other devices on your network or Tailscale reach it. |
-| `CESIUM_ION_TOKEN` | Free Cesium ion token (see below). Adds 3D terrain and Google's photorealistic 3D cities. |
+| `CESIUM_ION_TOKEN` | Free Cesium ion token (see below). Adds 3D terrain and 3D buildings. |
 | `DISABLED_SOURCES` | Comma-separated source ids to switch off. |
 
-### 3D terrain and cities (free Cesium ion token)
+### 3D terrain and buildings (free Cesium ion token)
 
 1. Create a free account at <https://ion.cesium.com/signup>. The free Community plan covers personal, non-commercial use.
 2. Open **Access Tokens** in the ion dashboard and copy the **Default** token.
 3. Put it in `.env` as `CESIUM_ION_TOKEN=...` and restart with `npm start` (no rebuild needed).
-4. If the 3D view says Google's cities didn't load, open **Asset Depot** in ion, find **Google Photorealistic 3D Tiles** and add it to your assets.
 
-The free plan includes 1,000 loads of Google's 3D tiles a month; each time someone opens the 3D view counts as one.
+The 3D view then shows terrain and buildings. Pick the buildings at the bottom right of the 3D view:
+
+- **OSM** (default): grey buildings with real heights from OpenStreetMap. This is the one that works in Türkiye.
+- **Google**: Google's photorealistic 3D cities. Google has no 3D models for Türkiye, so cities here look flat; it is worth it abroad. If it doesn't load, add **Google Photorealistic 3D Tiles** from the **Asset Depot** in ion. The free plan allows 1,000 Google loads a month.
+- **Kapalı**: terrain and imagery only.
 
 ### Directions and your location
 
