@@ -3,12 +3,14 @@ import { describe, expect, it } from 'vitest';
 import {
   featureCentre,
   focusFeatures,
+  greatCircle,
   prepare,
   quakeColor,
   rgba,
   styleLayerIds,
   tailsReachingNow,
   tempColor,
+  trackBounds,
   trackFeatures,
   trackStats,
   type TrackPoint,
@@ -119,6 +121,39 @@ describe('paths', () => {
     expect(ship.features).toHaveLength(1);
     expect(ship.features[0]!.geometry!.type === 'LineString' && ship.features[0]!.geometry!.coordinates).toHaveLength(4);
     expect(trackFeatures(pts.slice(0, 1), 'aircraft').features).toEqual([]);
+  });
+
+  it('dashes stretches nobody saw, and draws the route', () => {
+    const route = {
+      from: { icao: 'LTAI', iata: 'AYT', name: 'Antalya International Airport', city: 'Antalya', lng: 30.8, lat: 36.9 },
+      to: { icao: 'EDDP', iata: 'LEJ', name: 'Leipzig Halle Airport', city: 'Leipzig', lng: 12.24, lat: 51.43 },
+    };
+    const flight: TrackPoint[] = [
+      [31.5, 38.0, t0, 9000],
+      [31.6, 38.1, t0 + 30_000, 9000],
+      [30.0, 40.0, t0 + 30 * 60_000, 11000], // 30 min and 250 km later
+      [29.9, 40.1, t0 + 31 * 60_000, 11000],
+    ];
+    const fc = trackFeatures(flight, 'aircraft', undefined, route, false);
+    const parts = fc.features.map((f) => (f.properties as unknown as { part: string }).part);
+    expect(parts).toEqual(['path', 'gap', 'path', 'gap', 'plan', 'airport', 'airport']);
+    // The unseen climb from Antalya starts on the ground and reaches the first seen point's altitude.
+    const climb = fc.features[3]!.geometry!.type === 'LineString' ? fc.features[3]!.geometry!.coordinates : [];
+    expect(climb[0]).toEqual([30.8, 36.9, 0]);
+    expect(climb.at(-1)).toEqual([31.5, 38, 9000]);
+    expect(fc.features[5]!.properties).toMatchObject({ label: 'AYT' });
+    // Seen from the ground up: no dashed start.
+    const fromGround = trackFeatures([[30.8, 36.9, t0, 0], ...flight], 'aircraft', undefined, route, true);
+    expect(fromGround.features.filter((f) => (f.properties as unknown as { part: string }).part === 'gap')).toHaveLength(1);
+    expect(trackBounds(flight, route)).toEqual([12.24, 36.9, 31.6, 51.43]);
+  });
+
+  it('follows the globe between airports', () => {
+    const line = greatCircle([28.71, 41.26], [-73.78, 40.64]); // İstanbul to New York
+    expect(line.length).toBeGreaterThan(100);
+    // Bowing north over Europe and the Atlantic, well above both ends (about 54°N at most).
+    expect(Math.max(...line.map((p) => p[1]))).toBeGreaterThan(53);
+    expect(line.at(-1)).toEqual([-73.78, 40.64]);
   });
 
   it('measures a path', () => {

@@ -5,6 +5,7 @@ import type {
   RouteResult,
   ServerEvent,
   SourceHealth,
+  TrackAnswer,
   TravelMode,
 } from '@durbun/core';
 import { useMemo } from 'react';
@@ -220,14 +221,11 @@ async function loadLayer(id: string): Promise<void> {
 
 // ---- paths of aircraft and ships ----
 
-/** [lng, lat, time (ms), altitude (m) or null], as the server keeps them. */
-export type TrackPoint = [number, number, number, number | null];
-
 interface TrackState {
   /** Layer id → short trails behind every moving item. */
   tails: Record<string, FeatureCollection>;
-  /** The selected item's full known path. */
-  selected?: { id: string; points: TrackPoint[] };
+  /** The selected item's path: for aircraft the whole current flight, with its route when known. */
+  selected?: TrackAnswer;
 }
 
 export const useTracks = create<TrackState>(() => ({ tails: {} }));
@@ -253,7 +251,7 @@ async function loadTrack(id: string | undefined): Promise<void> {
       useTracks.setState({ selected: undefined });
       return;
     }
-    const body = (await res.json()) as { id: string; points: TrackPoint[] };
+    const body = (await res.json()) as TrackAnswer;
     if (req === trackRequest) useTracks.setState({ selected: body });
   } catch {
     // Keep whatever path is shown; the next update tries again.

@@ -18,7 +18,7 @@ Third-party data keeps its own terms:
 - Cloud imagery: contains modified EUMETSAT Meteosat data (EUMETView).
 - Province boundaries: Natural Earth (public domain).
 - Fire detections: NASA FIRMS (LANCE), VIIRS and MODIS active fire products.
-- Aircraft positions: adsb.fi, adsb.lol (ODbL) and The OpenSky Network.
+- Aircraft positions: adsb.fi, adsb.lol (ODbL) and The OpenSky Network. Flight histories: adsb.lol traces (ODbL) and OpenSky tracks. Flight routes: adsb.im route database.
 - Ship positions: AISStream.io.
 - Straits traffic hours: T.C. Kıyı Emniyeti Genel Müdürlüğü.
 - News headlines and snippets belong to their outlets; Dürbün shows the headline, a short snippet and a link to the original.

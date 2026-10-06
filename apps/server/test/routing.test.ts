@@ -53,6 +53,9 @@ describe('router', () => {
         h.calls += 1;
         return osrm as T;
       },
+      async postJson<T>() {
+        return {} as T;
+      },
     };
     return h;
   }

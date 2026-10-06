@@ -1,0 +1,34 @@
+[
+ {
+  "_airport_codes_iata": "AYT-LEJ",
+  "_airports": [
+   {
+    "alt_feet": 177.0,
+    "alt_meters": 53.95,
+    "countryiso2": "TR",
+    "iata": "AYT",
+    "icao": "LTAI",
+    "lat": 36.898701,
+    "location": "Antalya",
+    "lon": 30.800501,
+    "name": "Antalya International Airport"
+   },
+   {
+    "alt_feet": 465.0,
+    "alt_meters": 141.73,
+    "countryiso2": "DE",
+    "iata": "LEJ",
+    "icao": "EDDP",
+    "lat": 51.4324,
+    "location": "Leipzig",
+    "lon": 12.2416,
+    "name": "Leipzig Halle Airport"
+   }
+  ],
+  "airline_code": "CAI",
+  "airport_codes": "LTAI-EDDP",
+  "callsign": "CAI5A",
+  "number": "5A",
+  "plausible": true
+ }
+]

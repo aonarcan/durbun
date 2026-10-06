@@ -22,8 +22,11 @@ import {
   FIRE_COLORS,
   FOCUS_COLOR,
   KIND_COLORS,
+  PATH_GAP_COLOR,
+  type PathPart,
   STRAIT_COLORS,
   TRAIL_COLORS,
+  trackFeatures,
   lineBounds,
   PROVINCE_LINE_COLOR,
   quakeColor,
@@ -601,38 +604,75 @@ export default function GlobeView() {
           }
         }
       }
-      // The selected item's whole known path, coloured by altitude for aircraft.
+      // The selected item's path: aircraft at altitude and coloured by it; unseen parts and the rest of the route dashed.
       const sel = selectedTrack && items.get(selectedTrack.id);
-      if (sel && selectedTrack.points.length > 1) {
-        const pts = selectedTrack.points;
-        if (air) {
-          for (let i = 1; i < pts.length; i++) {
-            const [a, b] = [pts[i - 1]!, pts[i]!];
-            const band = planeBand(b[3] === 0 ? 'ground' : undefined, b[3] === null ? undefined : b[3] / 0.3048);
+      if (sel && selectedTrack.points.length > 0) {
+        const parts = trackFeatures(
+          selectedTrack.points,
+          layer.id,
+          air ? nowAt(sel) : pointOf(sel),
+          selectedTrack.route,
+          selectedTrack.fromGround,
+        );
+        const dashed = new Cesium.PolylineDashMaterialProperty({
+          color: Cesium.Color.fromCssColorString(PATH_GAP_COLOR),
+          dashLength: 14,
+        });
+        parts.features.forEach((f, i) => {
+          const part = (f.properties as unknown as { part: PathPart }).part;
+          if (f.geometry?.type === 'Point') {
+            const [lng, lat] = f.geometry.coordinates;
+            const label = String((f.properties as unknown as { label?: string }).label ?? '');
             ds.entities.add({
-              id: `trail:path:${i}`,
-              polyline: {
-                positions: Cesium.Cartesian3.fromDegreesArrayHeights([a[0], a[1], a[3] ?? 0, b[0], b[1], b[3] ?? 0]),
-                width: 4,
-                material: new Cesium.PolylineOutlineMaterialProperty({
-                  color: Cesium.Color.fromCssColorString(PLANE_COLORS[band]),
-                  outlineColor: Cesium.Color.WHITE,
-                  outlineWidth: 1,
-                }),
+              id: `trail:airport:${i}`,
+              position: Cesium.Cartesian3.fromDegrees(lng!, lat!),
+              point: {
+                pixelSize: 9,
+                color: Cesium.Color.WHITE,
+                outlineColor: Cesium.Color.fromCssColorString('#1e293b'),
+                outlineWidth: 2.5,
+                heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+                disableDepthTestDistance: Number.POSITIVE_INFINITY,
+              },
+              label: {
+                text: label,
+                font: 'bold 13px Inter, system-ui, sans-serif',
+                fillColor: Cesium.Color.fromCssColorString('#1e293b'),
+                outlineColor: Cesium.Color.WHITE,
+                outlineWidth: 3,
+                style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                pixelOffset: new Cesium.Cartesian2(0, 16),
+                heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+                disableDepthTestDistance: Number.POSITIVE_INFINITY,
               },
             });
+            return;
           }
-        } else {
+          if (f.geometry?.type !== 'LineString') return;
+          const coords = f.geometry.coordinates;
+          const color = String((f.properties as unknown as { color?: string }).color ?? PATH_GAP_COLOR);
+          const positions = air
+            ? Cesium.Cartesian3.fromDegreesArrayHeights(coords.flatMap((c) => [c[0]!, c[1]!, c[2] ?? 0]))
+            : Cesium.Cartesian3.fromDegreesArray(coords.flatMap((c) => [c[0]!, c[1]!]));
           ds.entities.add({
-            id: 'trail:path',
+            id: `trail:path:${i}`,
             polyline: {
-              positions: Cesium.Cartesian3.fromDegreesArray(pts.flatMap((p) => [p[0], p[1]])),
-              clampToGround: true,
-              width: 4,
-              material: Cesium.Color.fromCssColorString(TRAIL_COLORS.ships!),
+              positions,
+              ...(air ? {} : { clampToGround: true }),
+              width: part === 'path' ? 4 : 2.5,
+              material:
+                part === 'path'
+                  ? air
+                    ? new Cesium.PolylineOutlineMaterialProperty({
+                        color: Cesium.Color.fromCssColorString(color),
+                        outlineColor: Cesium.Color.WHITE,
+                        outlineWidth: 1,
+                      })
+                    : Cesium.Color.fromCssColorString(color)
+                  : dashed,
             },
           });
-        }
+        });
       }
     }
     viewer.scene.requestRender();

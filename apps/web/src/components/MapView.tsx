@@ -79,7 +79,7 @@ function drawPaths(map: MapLibreMap): void {
     return;
   }
   const item = featuresNow(layer, data.collections[layer.id], filters).find((f) => f.properties.id === selected.id);
-  syncTrack(map, trackFeatures(selected.points, layer.id, item ? pointOf(item) : undefined));
+  syncTrack(map, trackFeatures(selected.points, layer.id, item ? pointOf(item) : undefined, selected.route, selected.fromGround));
 }
 
 /** [lng, lat] or [lng, lat, zoom] for the durbun:fly event. */

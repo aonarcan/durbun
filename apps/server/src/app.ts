@@ -3,7 +3,8 @@ import { readFile } from 'node:fs/promises';
 import fastifyCompress from '@fastify/compress';
 import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
-import type { ServerEvent } from '@durbun/core';
+import { pointOf, type ServerEvent } from '@durbun/core';
+import type { FlightPaths } from './flights.ts';
 import type { Store } from './kit/store.ts';
 import { PROVINCES_FILE } from './provinces.ts';
 import { isTravelMode, parseLngLat, type Router } from './routing.ts';
@@ -20,10 +21,12 @@ export interface AppOptions {
   webDist?: string;
   /** Branch and commit the server runs from, shown on the sources page. */
   version?: VersionInfo;
+  /** Whole flights of selected aircraft from outside histories; without it, only Dürbün's own positions. */
+  flights?: FlightPaths;
 }
 
 /** The HTTP API plus, in production, the built web app. */
-export async function buildApp({ store, cesiumIonToken, webDist, router, cloudTile, version }: AppOptions): Promise<FastifyInstance> {
+export async function buildApp({ store, cesiumIonToken, webDist, router, cloudTile, version, flights }: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   // Layers like ships and news are large JSON; gzip makes them several times smaller over Tailscale.
   await app.register(fastifyCompress, { encodings: ['gzip', 'deflate'] });
@@ -53,9 +56,23 @@ export async function buildApp({ store, cesiumIonToken, webDist, router, cloudTi
     return fc;
   });
   app.get<{ Params: { id: string } }>('/api/tracks/:id', async (req, reply) => {
-    const points = store.track(req.params.id);
-    if (!points) return reply.code(404).send({ error: 'No path known for this item' });
-    return { id: req.params.id, points };
+    const { id } = req.params;
+    const own = store.track(id);
+    const hex = /^aircraft:([0-9a-f]{6})$/.exec(id)?.[1];
+    if (hex && flights) {
+      // The whole current flight, not just what Dürbün saw since it started.
+      const current = store.getCollection('aircraft')?.features.find((f) => f.properties.id === id);
+      const callsign = current?.properties.details?.callsign;
+      const at = current ? pointOf(current) : undefined;
+      const path = await flights.path(hex, {
+        own: own ?? [],
+        ...(typeof callsign === 'string' ? { callsign } : {}),
+        ...(at ? { at } : {}),
+      });
+      if (path.points.length > 0) return { id, ...path };
+    }
+    if (!own) return reply.code(404).send({ error: 'No path known for this item' });
+    return { id, points: own };
   });
 
   // Province outlines for the earthquake view and warnings (Natural Earth, public domain).
