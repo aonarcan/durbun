@@ -7,10 +7,13 @@ import type {
   SourceHealth,
   TravelMode,
 } from '@durbun/core';
+import { useMemo } from 'react';
 import { create } from 'zustand';
 import type { Lang } from './i18n.ts';
 import { DEFAULT_CAMERA, type CameraState } from './lib/camera.ts';
+import type { Filters } from './lib/filters.ts';
 import { locate } from './lib/locate.ts';
+import type { ProvinceFeature, QuakeFocus } from './lib/quake.ts';
 
 export type ViewMode = 'map' | 'satellite' | 'dark' | '3d';
 export type Buildings3d = 'osm' | 'google' | 'off';
@@ -26,6 +29,8 @@ interface UiState {
   visible: Record<string, boolean>;
   /** Layer id → chosen time window in hours, for layers that offer one. */
   windows: Record<string, number>;
+  /** Layer id → chosen minimum value (e.g. magnitude), for layers that offer one. */
+  minValues: Record<string, number>;
   /** Which 3D buildings the 3D view shows (needs a Cesium ion token). */
   buildings3d: Buildings3d;
   selectedId: string | undefined;
@@ -36,6 +41,7 @@ interface UiState {
   setCamera(camera: CameraState): void;
   setVisible(layerId: string, on: boolean): void;
   setWindow(layerId: string, hours: number): void;
+  setMinValue(layerId: string, value: number): void;
   setBuildings3d(mode: Buildings3d): void;
   select(id: string | undefined): void;
   setPanelOpen(open: boolean): void;
@@ -62,6 +68,7 @@ export const useUi = create<UiState>((set) => ({
   camera: saved.camera ?? DEFAULT_CAMERA,
   visible: saved.visible ?? {},
   windows: saved.windows ?? {},
+  minValues: saved.minValues ?? {},
   buildings3d: saved.buildings3d ?? 'osm',
   selectedId: undefined,
   panelOpen: typeof window !== 'undefined' ? window.innerWidth > 720 : true,
@@ -71,6 +78,7 @@ export const useUi = create<UiState>((set) => ({
   setCamera: (camera) => set({ camera }),
   setVisible: (layerId, on) => set((s) => ({ visible: { ...s.visible, [layerId]: on } })),
   setWindow: (layerId, hours) => set((s) => ({ windows: { ...s.windows, [layerId]: hours } })),
+  setMinValue: (layerId, value) => set((s) => ({ minValues: { ...s.minValues, [layerId]: value } })),
   setBuildings3d: (buildings3d) => set({ buildings3d }),
   select: (selectedId) => set({ selectedId }),
   setPanelOpen: (panelOpen) => set({ panelOpen }),
@@ -89,6 +97,7 @@ useUi.subscribe((s) => {
       camera: s.camera,
       visible: s.visible,
       windows: s.windows,
+      minValues: s.minValues,
       buildings3d: s.buildings3d,
     };
     localStorage.setItem(SAVED_KEY, JSON.stringify(saved));
@@ -102,6 +111,56 @@ window.addEventListener('hashchange', () => useUi.setState({ page: pageFromHash(
 
 export function isVisible(layer: LayerSummary, visible: Record<string, boolean>): boolean {
   return visible[layer.id] ?? layer.defaultOn;
+}
+
+/** Hook: the viewer's layer filters, as one object. */
+export function useFilters(): Filters {
+  const windows = useUi((s) => s.windows);
+  const minValues = useUi((s) => s.minValues);
+  return useMemo(() => ({ windows, minValues }), [windows, minValues]);
+}
+
+export function currentFilters(): Filters {
+  const { windows, minValues } = useUi.getState();
+  return { windows, minValues };
+}
+
+// ---- image layers (radar animation) ----
+
+interface RasterState {
+  /** Layer id → frame index being shown; missing means the newest frame. */
+  frame: Record<string, number>;
+  playing: boolean;
+}
+
+export const useRaster = create<RasterState>(() => ({ frame: {}, playing: false }));
+
+/** Index of the frame to show for an image layer. */
+export function frameIndex(layer: LayerSummary, frame: Record<string, number>): number {
+  const n = layer.raster?.frames.length ?? 0;
+  const pick = frame[layer.id];
+  return pick !== undefined && pick >= 0 && pick < n ? pick : n - 1;
+}
+
+// ---- earthquake view ----
+
+/**
+ * The selected earthquake's rings, aftershocks and nearby provinces, as the
+ * maps draw them (aftershocks limited to those the layer filters show); set by the info panel.
+ */
+export const useFocus = create<{ focus: QuakeFocus | undefined }>(() => ({ focus: undefined }));
+
+let provincesPromise: Promise<ProvinceFeature[]> | undefined;
+
+/** Province outlines (loaded once, on first use). */
+export function loadProvinces(): Promise<ProvinceFeature[]> {
+  provincesPromise ??= getJson<{ features: ProvinceFeature[] }>('/api/provinces')
+    .then((fc) => fc.features)
+    .catch((err: unknown) => {
+      provincesPromise = undefined;
+      throw err;
+    });
+  return provincesPromise;
 }
 
 // ---- live data from the server ----
@@ -154,7 +213,9 @@ function applyEvent(e: ServerEvent): void {
   if (e.type === 'layer') {
     useData.setState((s) => ({
       layers: s.layers.map((l) =>
-        l.id === e.layer ? { ...l, version: e.version, count: e.count, updatedAt: e.updatedAt } : l,
+        l.id === e.layer
+          ? { ...l, version: e.version, count: e.count, updatedAt: e.updatedAt, ...(e.raster ? { raster: e.raster } : {}) }
+          : l,
       ),
     }));
     void loadLayer(e.layer).catch(() => {});

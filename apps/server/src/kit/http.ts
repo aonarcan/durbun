@@ -20,13 +20,14 @@ export interface RequestOptions {
 
 export interface HttpClient {
   getText(url: string, opts?: RequestOptions): Promise<string>;
+  getBuffer(url: string, opts?: RequestOptions): Promise<Buffer>;
   getJson<T = unknown>(url: string, opts?: RequestOptions): Promise<T>;
 }
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 export function createHttpClient(userAgent: string, fetchImpl: FetchLike = fetch): HttpClient {
-  async function getText(url: string, opts: RequestOptions = {}): Promise<string> {
+  async function request(url: string, opts: RequestOptions): Promise<Response> {
     let res: Response;
     try {
       res = await fetchImpl(url, {
@@ -37,11 +38,19 @@ export function createHttpClient(userAgent: string, fetchImpl: FetchLike = fetch
     } catch (err) {
       throw new HttpError(describeNetworkError(err));
     }
-    const body = await res.text();
     if (!res.ok) {
+      const body = await res.text().catch(() => '');
       throw new HttpError(`HTTP ${res.status}${body ? `: ${snippet(body)}` : ''}`, res.status);
     }
-    return body;
+    return res;
+  }
+
+  async function getText(url: string, opts: RequestOptions = {}): Promise<string> {
+    return (await request(url, opts)).text();
+  }
+
+  async function getBuffer(url: string, opts: RequestOptions = {}): Promise<Buffer> {
+    return Buffer.from(await (await request(url, opts)).arrayBuffer());
   }
 
   async function getJson<T>(url: string, opts: RequestOptions = {}): Promise<T> {
@@ -53,7 +62,7 @@ export function createHttpClient(userAgent: string, fetchImpl: FetchLike = fetch
     }
   }
 
-  return { getText, getJson };
+  return { getText, getJson, getBuffer };
 }
 
 function snippet(text: string): string {

@@ -71,10 +71,11 @@ export class Scheduler {
     const started = performance.now();
     this.store.recordAttempt(source.id);
     try {
-      const features = await source.fetch({ http: this.http, signal, now: new Date() });
+      const result = await source.fetch({ http: this.http, signal, now: new Date() });
       const ms = Math.round(performance.now() - started);
-      this.store.recordSuccess(source.id, features, ms);
-      this.log(`[${source.id}] ok: ${features.length} items in ${ms} ms`);
+      this.store.recordSuccess(source.id, result, ms);
+      const count = Array.isArray(result) ? `${result.length} items` : `${result.raster.frames.length} frames`;
+      this.log(`[${source.id}] ok: ${count} in ${ms} ms`);
       return true;
     } catch (err) {
       const ms = Math.round(performance.now() - started);

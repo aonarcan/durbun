@@ -658,3 +658,209 @@ th.num {
     display: block;
   }
 }
+
+/* ---- stage 2a: weather and earthquakes ---- */
+
+.swatch.area {
+  border-radius: 4px;
+}
+
+.swatch.image {
+  border-radius: 4px;
+  background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.45) 25%, transparent 25%, transparent 50%, rgba(255, 255, 255, 0.45) 50%, rgba(255, 255, 255, 0.45) 75%, transparent 75%) !important;
+  background-size: 6px 6px;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 0 0 6px 26px;
+  font-size: 12px;
+  align-items: center;
+}
+
+.legend i {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  vertical-align: -2px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+.legend-yellow {
+  background: #ffd60a;
+}
+
+.legend-orange {
+  background: #ff8c00;
+}
+
+.legend-red {
+  background: #e5001b;
+}
+
+.quake-view {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.quake-view h3 {
+  font-size: 13px;
+  margin: 0 0 6px;
+}
+
+.quake-view h4 {
+  font-size: 12px;
+  margin: 10px 0 4px;
+}
+
+.small-text {
+  font-size: 12px;
+  margin: 0 0 4px;
+  line-height: 1.4;
+}
+
+.mini-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+}
+
+.mini-list li {
+  padding: 2px 0;
+}
+
+.mini-list .link-button {
+  padding: 0;
+  font-weight: 600;
+  text-align: left;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+}
+
+.chip {
+  font-size: 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.mainshock {
+  background: var(--bg);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.mainshock .link-button {
+  padding: 0;
+  font-weight: 600;
+  text-align: left;
+}
+
+.chip-strong {
+  border-color: #b30000;
+}
+
+.quake-banner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(560px, calc(100% - 32px));
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--panel);
+  color: var(--text);
+  border-left: 5px solid #b30000;
+  border-radius: 8px;
+  padding: 6px 8px 6px 10px;
+  box-shadow: var(--shadow);
+  z-index: 2;
+}
+
+.quake-banner-mag {
+  font-weight: 800;
+  font-size: 18px;
+  color: #b30000;
+}
+
+.quake-banner-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quake-banner .icon-button {
+  border-color: var(--line);
+  color: var(--text);
+}
+
+.stage:has(.quake-banner) .globe-help {
+  top: 64px;
+}
+
+.radar-player {
+  position: absolute;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  width: min(460px, calc(100% - 32px));
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 6px 14px 6px 6px;
+  box-shadow: var(--shadow);
+  z-index: 2;
+}
+
+.radar-player input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  accent-color: #2ca25f;
+}
+
+.play-button {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 0;
+  background: #2ca25f;
+  color: #ffffff;
+  font-size: 13px;
+  flex: none;
+}
+
+.radar-time {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.stage:has(.radar-player) .globe-hint {
+  bottom: 84px;
+}
+
+@media (max-width: 720px) {
+  .quake-banner {
+    top: auto;
+    bottom: 76px;
+  }
+
+  .radar-player {
+    bottom: 16px;
+  }
+}

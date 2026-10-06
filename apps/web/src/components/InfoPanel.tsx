@@ -1,9 +1,12 @@
 import type { ReactNode } from 'react';
 import { DETAIL_LABELS, KIND_LABELS, t } from '../i18n.ts';
 import { dateTime, timeAgo } from '../lib/format.ts';
+import { featureCentre } from '../lib/mapLayers.ts';
 import { useNow } from '../lib/useNow.ts';
 import { useData, useUi } from '../state.ts';
 import { Directions } from './Directions.tsx';
+import type { FlyDetail } from './MapView.tsx';
+import { QuakeDetails } from './QuakeDetails.tsx';
 
 /** Details of the clicked feature. */
 export function InfoPanel() {
@@ -20,6 +23,7 @@ export function InfoPanel() {
   const title = lang === 'en' && p.titleEn ? p.titleEn : p.title;
   const text = lang === 'en' && p.textEn ? p.textEn : p.text;
   const coords = feature.geometry.type === 'Point' ? feature.geometry.coordinates : undefined;
+  const centre = featureCentre(feature);
 
   return (
     <aside className="panel info-panel" aria-live="polite">
@@ -33,7 +37,7 @@ export function InfoPanel() {
       {text && text !== title && <p className="info-text">{text}</p>}
       <dl>
         {p.observedAt && (
-          <Row label={t(lang, 'observedAt')}>
+          <Row label={t(lang, p.validUntil ? 'starts' : 'observedAt')}>
             {dateTime(p.observedAt, lang)} <span className="muted">({timeAgo(p.observedAt, lang, now)})</span>
           </Row>
         )}
@@ -52,11 +56,14 @@ export function InfoPanel() {
         )}
       </dl>
       <div className="info-actions">
-        {coords && (
+        {centre && (
           <button
             type="button"
             className="button"
-            onClick={() => window.dispatchEvent(new CustomEvent('durbun:fly', { detail: [coords[0], coords[1]] }))}
+            onClick={() => {
+              const detail: FlyDetail = centre.area ? [centre.lng, centre.lat, 7.5] : [centre.lng, centre.lat];
+              window.dispatchEvent(new CustomEvent('durbun:fly', { detail }));
+            }}
           >
             {t(lang, 'zoomHere')}
           </button>
@@ -67,6 +74,7 @@ export function InfoPanel() {
           </a>
         )}
       </div>
+      {p.layer === 'earthquakes' && <QuakeDetails feature={feature} />}
       {group === 'places' && <Directions feature={feature} />}
     </aside>
   );

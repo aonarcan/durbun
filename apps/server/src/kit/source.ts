@@ -1,4 +1,4 @@
-import type { Feature, LayerInfo } from '@durbun/core';
+import type { Feature, LayerInfo, RasterInfo } from '@durbun/core';
 import type { HttpClient } from './http.ts';
 
 export interface SourceContext {
@@ -23,7 +23,14 @@ export interface SourceDefinition {
   timeoutSec?: number;
   /** The source refuses connections from outside Turkey. */
   requiresTurkishIp?: boolean;
-  fetch(ctx: SourceContext): Promise<Feature[]>;
+  fetch(ctx: SourceContext): Promise<SourceResult>;
+}
+
+/** Features for a feature layer, or tile frames for an image layer (radar). */
+export type SourceResult = Feature[] | { raster: RasterInfo };
+
+export function isRasterResult(r: SourceResult): r is { raster: RasterInfo } {
+  return !Array.isArray(r);
 }
 
 /** A layer as declared in code; its source list is filled in from the sources. */

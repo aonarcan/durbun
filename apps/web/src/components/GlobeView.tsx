@@ -15,9 +15,21 @@ import {
 } from '../lib/camera.ts';
 import { shownFeatures } from '../lib/filters.ts';
 import { groundAtCentre } from '../lib/globePick.ts';
-import { KIND_COLORS, lineBounds, ROUTE_COLORS } from '../lib/mapLayers.ts';
-import { isVisible, useData, useRoute, useUi } from '../state.ts';
+import {
+  absoluteTileUrl,
+  AFTERSHOCK_COLOR,
+  FOCUS_COLOR,
+  KIND_COLORS,
+  lineBounds,
+  PROVINCE_LINE_COLOR,
+  quakeColor,
+  ROUTE_COLORS,
+  tempColor,
+  WARNING_COLORS,
+} from '../lib/mapLayers.ts';
+import { frameIndex, isVisible, useData, useFilters, useFocus, useRaster, useRoute, useUi } from '../state.ts';
 import { GlobeControls, setUpMouse } from './GlobeControls.tsx';
+import type { FlyDetail } from './MapView.tsx';
 
 let configPromise: Promise<{ cesiumIonToken: string }> | undefined;
 function loadConfig() {
@@ -79,6 +91,10 @@ function readCamera(viewer: Cesium.Viewer): CameraState | undefined {
 
 function pointColour(layer: LayerSummary, f: Feature): Cesium.Color {
   if (layer.id === 'incidents') return Cesium.Color.fromCssColorString(KIND_COLORS[f.properties.kind ?? ''] ?? layer.color);
+  if (layer.id === 'earthquakes') {
+    const t = f.properties.observedAt ? Date.parse(f.properties.observedAt) : NaN;
+    return Cesium.Color.fromCssColorString(quakeColor(Number.isFinite(t) ? (Date.now() - t) / 3_600_000 : 9999));
+  }
   return Cesium.Color.fromCssColorString(layer.color);
 }
 
@@ -108,6 +124,126 @@ function glyphIcon(color: string, glyph: string): HTMLCanvasElement {
   ctx.fillText(glyph, size / 2, size / 2 + 1);
   iconCache.set(key, canvas);
   return canvas;
+}
+
+/** A temperature badge: a round dot in the temperature's colour with the value in it. */
+function temperatureIcon(value: number | undefined): HTMLCanvasElement {
+  const label = value === undefined ? '–' : `${Math.round(value)}°`;
+  const key = `temp|${label}`;
+  const cached = iconCache.get(key);
+  if (cached) return cached;
+  const size = 56;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, size / 2 - 3, 0, Math.PI * 2);
+  ctx.fillStyle = tempColor(value);
+  ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#ffffff';
+  ctx.stroke();
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 22px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, size / 2, size / 2 + 1);
+  iconCache.set(key, canvas);
+  return canvas;
+}
+
+/** A wind arrow pointing up, drawn outside a badge-sized gap so it can turn around the badge. */
+function windArrowIcon(): HTMLCanvasElement {
+  const cached = iconCache.get('wind');
+  if (cached) return cached;
+  const size = 128; // shown at half size: 64 px, the arrow 15–32 px from the centre
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  const c = size / 2;
+  ctx.beginPath();
+  ctx.moveTo(c, 2);
+  ctx.lineTo(c + 12, 20);
+  ctx.lineTo(c + 4, 17);
+  ctx.lineTo(c + 4, 34);
+  ctx.lineTo(c - 4, 34);
+  ctx.lineTo(c - 4, 17);
+  ctx.lineTo(c - 12, 20);
+  ctx.closePath();
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = '#ffffff';
+  ctx.stroke();
+  ctx.fillStyle = '#14213d';
+  ctx.fill();
+  iconCache.set('wind', canvas);
+  return canvas;
+}
+
+/** The local north direction at a point, so a billboard can turn with the map. */
+function northAt(position: Cesium.Cartesian3): Cesium.Cartesian3 {
+  const enu = Cesium.Transforms.eastNorthUpToFixedFrame(position);
+  return Cesium.Cartesian3.normalize(
+    Cesium.Matrix4.getColumn(enu, 1, new Cesium.Cartesian4()) as unknown as Cesium.Cartesian3,
+    new Cesium.Cartesian3(),
+  );
+}
+
+const GROUND = {
+  heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+  disableDepthTestDistance: Number.POSITIVE_INFINITY,
+};
+
+/** A warning area: a tinted province with a coloured edge. Entity ids get "#n" so picking can find the feature. */
+function addArea(ds: Cesium.CustomDataSource, layer: LayerSummary, f: Feature): void {
+  const g = f.geometry;
+  const polygons = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
+  const color = Cesium.Color.fromCssColorString(WARNING_COLORS[f.properties.kind ?? ''] ?? layer.color);
+  const begins = f.properties.observedAt ? Date.parse(f.properties.observedAt) : NaN;
+  const active = !(begins > Date.now());
+  polygons.forEach((rings, i) => {
+    const [outer, ...holes] = rings.map((r) => Cesium.Cartesian3.fromDegreesArray(r.flatMap((c) => [c[0], c[1]])));
+    if (!outer) return;
+    ds.entities.add({
+      id: `${f.properties.id}#${i}`,
+      polygon: {
+        hierarchy: new Cesium.PolygonHierarchy(
+          outer,
+          holes.map((h) => new Cesium.PolygonHierarchy(h)),
+        ),
+        material: color.withAlpha(active ? 0.38 : 0.16),
+      },
+    });
+    ds.entities.add({
+      id: `${f.properties.id}#${i}-edge`,
+      polyline: { positions: outer, clampToGround: true, width: active ? 2.5 : 1.2, material: color },
+    });
+  });
+}
+
+function addWeather(ds: Cesium.CustomDataSource, f: Feature, position: Cesium.Cartesian3): void {
+  const windDir = f.properties.style?.windDir;
+  if (typeof windDir === 'number') {
+    ds.entities.add({
+      id: `${f.properties.id}#wind`,
+      position,
+      billboard: {
+        ...GROUND,
+        image: windArrowIcon(),
+        scale: 0.5,
+        alignedAxis: northAt(position),
+        // Cesium turns billboards anticlockwise; the arrow points where the wind blows to.
+        rotation: -Cesium.Math.toRadians(windDir + 180),
+      },
+    });
+  }
+  ds.entities.add({
+    id: f.properties.id,
+    position,
+    billboard: { ...GROUND, image: temperatureIcon(f.properties.value), scale: 0.5 },
+  });
 }
 
 function pointSize(layer: LayerSummary, f: Feature): number {
@@ -143,6 +279,7 @@ export default function GlobeView() {
   const container = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<Cesium.Viewer | null>(null);
   const sourcesRef = useRef(new Map<string, Cesium.CustomDataSource>());
+  const imageryRef = useRef(new Map<string, { layerId: string; imagery: Cesium.ImageryLayer }>());
   const [hasToken, setHasToken] = useState<boolean | undefined>(undefined);
   const [ready, setReady] = useState(false);
   const [buildings, setBuildings] = useState<BuildingsStatus>('off');
@@ -152,8 +289,10 @@ export default function GlobeView() {
   const layers = useData((s) => s.layers);
   const collections = useData((s) => s.collections);
   const visible = useUi((s) => s.visible);
-  const windows = useUi((s) => s.windows);
+  const filters = useFilters();
   const lang = useUi((s) => s.lang);
+  const frame = useRaster((s) => s.frame);
+  const focus = useFocus((s) => s.focus);
 
   useEffect(() => {
     let cancelled = false;
@@ -197,8 +336,9 @@ export default function GlobeView() {
       handler.setInputAction((click: { position: Cesium.Cartesian2 }) => {
         const picked = viewer?.scene.pick(click.position) as { id?: Cesium.Entity } | undefined;
         const id = picked?.id instanceof Cesium.Entity ? picked.id.id : undefined;
-        if (id?.startsWith('route:')) return; // the route line is not a place
-        useUi.getState().select(id);
+        if (id?.startsWith('route:') || id?.startsWith('focus:')) return; // drawings, not places
+        // Areas and wind arrows are drawn as several entities: "<feature id>#<part>".
+        useUi.getState().select(id?.split('#')[0]);
       }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
       // Draw whatever data is already loaded.
@@ -208,6 +348,7 @@ export default function GlobeView() {
     return () => {
       cancelled = true;
       sourcesRef.current.clear();
+      imageryRef.current.clear();
       viewerRef.current = null;
       if (viewer && !viewer.isDestroyed()) viewer.destroy();
     };
@@ -218,6 +359,7 @@ export default function GlobeView() {
     const viewer = viewerRef.current;
     if (!viewer) return;
     for (const layer of layers) {
+      if (layer.raster) continue;
       let ds = sourcesRef.current.get(layer.id);
       if (!ds) {
         ds = new Cesium.CustomDataSource(layer.id);
@@ -227,26 +369,30 @@ export default function GlobeView() {
       ds.show = isVisible(layer, visible);
       ds.entities.suspendEvents();
       ds.entities.removeAll();
-      for (const f of shownFeatures(layer, collections[layer.id], windows)) {
+      for (const f of shownFeatures(layer, collections[layer.id], filters)) {
+        if (layer.shape === 'areas') {
+          addArea(ds, layer, f);
+          continue;
+        }
         if (f.geometry.type !== 'Point') continue;
         const [lng, lat] = f.geometry.coordinates;
         const position = Cesium.Cartesian3.fromDegrees(lng, lat);
-        const common = {
-          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        };
+        if (layer.id === 'weather-now') {
+          addWeather(ds, f, position);
+          continue;
+        }
         ds.entities.add(
           layer.glyph
             ? {
                 id: f.properties.id,
                 position,
-                billboard: { ...common, image: glyphIcon(layer.color, layer.glyph), scale: 0.5 },
+                billboard: { ...GROUND, image: glyphIcon(layer.color, layer.glyph), scale: 0.5 },
               }
             : {
                 id: f.properties.id,
                 position,
                 point: {
-                  ...common,
+                  ...GROUND,
                   pixelSize: pointSize(layer, f),
                   color: pointColour(layer, f),
                   outlineColor: Cesium.Color.WHITE,
@@ -258,7 +404,132 @@ export default function GlobeView() {
       ds.entities.resumeEvents();
     }
     viewer.scene.requestRender();
-  }, [layers, collections, visible, windows, ready]);
+  }, [layers, collections, visible, filters, ready]);
+
+  // Radar and cloud images: one imagery layer per frame, the next frame loaded invisibly.
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer || !ready) return;
+    const known = imageryRef.current;
+    for (const layer of layers) {
+      const r = layer.raster;
+      if (!r) continue;
+      const on = isVisible(layer, visible) && r.frames.length > 0;
+      const index = frameIndex(layer, frame);
+      const current = r.frames[index]?.url;
+      const next = r.frames.length > 1 ? r.frames[(index + 1) % r.frames.length]?.url : undefined;
+      if (on) {
+        for (const url of [current, next]) {
+          if (!url || known.has(url)) continue;
+          const imagery = viewer.imageryLayers.addImageryProvider(
+            new Cesium.UrlTemplateImageryProvider({
+              url: absoluteTileUrl(url),
+              maximumLevel: r.maxzoom,
+              tileWidth: r.tileSize,
+              tileHeight: r.tileSize,
+              credit: layer.attribution,
+            }),
+          );
+          known.set(url, { layerId: layer.id, imagery });
+        }
+      }
+      const urls = new Set(r.frames.map((f) => f.url));
+      for (const [url, entry] of known) {
+        if (entry.layerId !== layer.id) continue;
+        if (!urls.has(url)) {
+          viewer.imageryLayers.remove(entry.imagery, true);
+          known.delete(url);
+          continue;
+        }
+        entry.imagery.show = on;
+        entry.imagery.alpha = url === current ? r.opacity : 0;
+      }
+    }
+    viewer.scene.requestRender();
+  }, [layers, visible, frame, ready]);
+
+  // The selected earthquake: distance rings, nearby provinces and aftershocks.
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer || !ready) return;
+    const ds = new Cesium.CustomDataSource('focus');
+    void viewer.dataSources.add(ds);
+    if (focus) {
+      const red = Cesium.Color.fromCssColorString(FOCUS_COLOR);
+      focus.provinces.forEach((p, i) => {
+        const polys = p.geometry.type === 'Polygon' ? [p.geometry.coordinates] : p.geometry.coordinates;
+        polys.forEach((rings, j) => {
+          ds.entities.add({
+            id: `focus:province:${i}:${j}`,
+            polyline: {
+              positions: Cesium.Cartesian3.fromDegreesArray(rings[0]!.flatMap((c) => [c[0], c[1]])),
+              clampToGround: true,
+              width: 2,
+              material: new Cesium.PolylineDashMaterialProperty({
+                color: Cesium.Color.fromCssColorString(PROVINCE_LINE_COLOR).withAlpha(0.85),
+                dashLength: 10,
+              }),
+            },
+          });
+        });
+      });
+      for (const ring of focus.rings) {
+        const coords = ring.geometry.coordinates[0]!;
+        ds.entities.add({
+          id: `focus:ring:${ring.km}`,
+          polyline: {
+            positions: Cesium.Cartesian3.fromDegreesArray(coords.flatMap((c) => [c[0], c[1]])),
+            clampToGround: true,
+            width: 2.5,
+            material: new Cesium.PolylineDashMaterialProperty({ color: red, dashLength: 14 }),
+          },
+        });
+        ds.entities.add({
+          id: `focus:ring-label:${ring.km}`,
+          position: Cesium.Cartesian3.fromDegrees(coords[0]![0], coords[0]![1]),
+          label: {
+            ...GROUND,
+            text: `${ring.km} km`,
+            font: 'bold 13px system-ui, sans-serif',
+            fillColor: red,
+            outlineColor: Cesium.Color.WHITE,
+            outlineWidth: 3,
+            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          },
+        });
+      }
+      for (const a of focus.aftershocks) {
+        if (a.geometry.type !== 'Point') continue;
+        ds.entities.add({
+          id: `focus:after:${a.properties.id}`,
+          position: Cesium.Cartesian3.fromDegrees(a.geometry.coordinates[0], a.geometry.coordinates[1]),
+          point: {
+            ...GROUND,
+            // A thin ring just outside the aftershock's own marker.
+            pixelSize: Math.max(5, Math.min(30, 4 + (a.properties.value ?? 0) * 3.5)) + 6,
+            color: Cesium.Color.TRANSPARENT,
+            outlineColor: Cesium.Color.fromCssColorString(AFTERSHOCK_COLOR),
+            outlineWidth: 2,
+          },
+        });
+      }
+      ds.entities.add({
+        id: 'focus:main',
+        position: Cesium.Cartesian3.fromDegrees(focus.centre[0], focus.centre[1]),
+        point: {
+          ...GROUND,
+          pixelSize: Math.max(18, Math.min(60, 10 + focus.magnitude * 5)),
+          color: Cesium.Color.TRANSPARENT,
+          outlineColor: red,
+          outlineWidth: 3,
+        },
+      });
+    }
+    viewer.scene.requestRender();
+    return () => {
+      if (!viewer.isDestroyed()) void viewer.dataSources.remove(ds, true);
+    };
+  }, [focus, ready]);
 
   // 3D buildings: OSM (default), Google's photorealistic tiles, or none.
   useEffect(() => {
@@ -358,14 +629,25 @@ export default function GlobeView() {
     };
   }, [ready]);
 
-  // Fly to a feature when the info panel asks for it.
+  // Fly to a feature, or frame an area, when a panel asks for it.
   useEffect(() => {
     const onFly = (e: Event) => {
-      const [lng, lat] = (e as CustomEvent<[number, number]>).detail;
-      viewerRef.current?.camera.flyTo({ destination: Cesium.Cartesian3.fromDegrees(lng, lat, 4000) });
+      const viewer = viewerRef.current;
+      if (!viewer) return;
+      const [lng, lat, zoom] = (e as CustomEvent<FlyDetail>).detail;
+      const height = zoom === undefined ? 4000 : rangeFromZoom(lat, zoom, viewportHeight(viewer), fovy(viewer));
+      viewer.camera.flyTo({ destination: Cesium.Cartesian3.fromDegrees(lng, lat, height) });
+    };
+    const onFit = (e: Event) => {
+      const [w, s, e2, n] = (e as CustomEvent<[number, number, number, number]>).detail;
+      viewerRef.current?.camera.flyTo({ destination: Cesium.Rectangle.fromDegrees(w, s, e2, n) });
     };
     window.addEventListener('durbun:fly', onFly);
-    return () => window.removeEventListener('durbun:fly', onFly);
+    window.addEventListener('durbun:fit', onFit);
+    return () => {
+      window.removeEventListener('durbun:fly', onFly);
+      window.removeEventListener('durbun:fit', onFit);
+    };
   }, []);
 
   return (

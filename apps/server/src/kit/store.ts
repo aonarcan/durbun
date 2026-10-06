@@ -6,10 +6,11 @@ import {
   type FeatureCollection,
   type LayerInfo,
   type LayerSummary,
+  type RasterInfo,
   type ServerEvent,
   type SourceHealth,
 } from '@durbun/core';
-import type { LayerDefinition, SourceDefinition } from './source.ts';
+import { isRasterResult, type LayerDefinition, type SourceDefinition, type SourceResult } from './source.ts';
 
 interface LayerState {
   info: LayerInfo;
@@ -76,6 +77,26 @@ export class Store extends EventEmitter<{ event: [ServerEvent] }> {
     });
   }
 
+  /** New tile frames for an image layer (e.g. the latest radar times). */
+  setSourceRaster(sourceId: string, raster: RasterInfo): void {
+    const h = this.mustHealth(sourceId);
+    const layer = this.layers.get(h.def.layer)!;
+    const hash = createHash('sha1').update(JSON.stringify(raster)).digest('hex');
+    layer.updatedAt = new Date(this.now());
+    if (hash === layer.hash) return;
+    layer.hash = hash;
+    layer.info = { ...layer.info, raster };
+    layer.version += 1;
+    this.emit('event', {
+      type: 'layer',
+      layer: layer.info.id,
+      version: layer.version,
+      count: raster.frames.length,
+      updatedAt: layer.updatedAt.toISOString(),
+      raster,
+    });
+  }
+
   getCollection(layerId: string): FeatureCollection | undefined {
     const layer = this.layers.get(layerId);
     if (!layer) return undefined;
@@ -86,7 +107,7 @@ export class Store extends EventEmitter<{ event: [ServerEvent] }> {
     return [...this.layers.values()].map((l) => ({
       ...l.info,
       version: l.version,
-      count: [...l.bySource.values()].reduce((n, f) => n + f.length, 0),
+      count: l.info.raster ? l.info.raster.frames.length : [...l.bySource.values()].reduce((n, f) => n + f.length, 0),
       ...(l.updatedAt ? { updatedAt: l.updatedAt.toISOString() } : {}),
     }));
   }
@@ -103,20 +124,21 @@ export class Store extends EventEmitter<{ event: [ServerEvent] }> {
     h.lastAttemptAt = new Date(this.now());
   }
 
-  recordSuccess(sourceId: string, features: Feature[], durationMs: number): void {
+  recordSuccess(sourceId: string, result: SourceResult, durationMs: number): void {
     const h = this.mustHealth(sourceId);
     h.lastSuccessAt = new Date(this.now());
     h.lastDurationMs = durationMs;
-    h.itemCount = features.length;
     h.consecutiveFailures = 0;
     delete h.lastError;
-    const newest = features.reduce<string | undefined>((max, f) => {
-      const t = f.properties.observedAt;
-      return t && (!max || t > max) ? t : max;
-    }, undefined);
+    const times = isRasterResult(result)
+      ? result.raster.frames.map((f) => f.time)
+      : result.map((f) => f.properties.observedAt);
+    h.itemCount = times.length;
+    const newest = times.reduce<string | undefined>((max, t) => (t && (!max || t > max) ? t : max), undefined);
     if (newest) h.newestItemAt = newest;
     else delete h.newestItemAt;
-    this.setSourceFeatures(sourceId, features);
+    if (isRasterResult(result)) this.setSourceRaster(sourceId, result.raster);
+    else this.setSourceFeatures(sourceId, result);
     this.emitHealth(sourceId);
   }
 

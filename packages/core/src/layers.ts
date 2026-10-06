@@ -17,6 +17,23 @@ export interface LayerInfo {
    * pick from, and the one shown at first. Features older than the window are hidden.
    */
   timeWindows?: { options: number[]; default: number };
+  /**
+   * A minimum for each feature's numeric value (e.g. earthquake magnitude) the
+   * viewer can pick; features below it are hidden.
+   */
+  minValue?: { label: string; options: number[]; default: number };
+  /** Drawn as image tiles instead of features (radar, clouds). */
+  raster?: RasterInfo;
+  /** "areas" for layers of polygons (drawn as tinted outlines); points otherwise. */
+  shape?: 'points' | 'areas';
+}
+
+/** Tiles for an image layer. Several frames make an animation (e.g. the last two hours of radar). */
+export interface RasterInfo {
+  frames: { time?: string; url: string }[];
+  tileSize: number;
+  maxzoom: number;
+  opacity: number;
 }
 
 export type LayerGroup = 'hazards' | 'roads' | 'transport' | 'places' | 'weather' | 'air-sea' | 'news';
