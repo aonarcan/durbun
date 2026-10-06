@@ -7,6 +7,7 @@ import type { ServerEvent } from '@durbun/core';
 import type { Store } from './kit/store.ts';
 import { PROVINCES_FILE } from './provinces.ts';
 import { isTravelMode, parseLngLat, type Router } from './routing.ts';
+import type { VersionInfo } from './version.ts';
 
 export interface AppOptions {
   store: Store;
@@ -17,10 +18,12 @@ export interface AppOptions {
   cloudTile?: (z: number, x: number, y: number) => Promise<Buffer>;
   /** Built web app to serve, if it exists. */
   webDist?: string;
+  /** Branch and commit the server runs from, shown on the sources page. */
+  version?: VersionInfo;
 }
 
 /** The HTTP API plus, in production, the built web app. */
-export async function buildApp({ store, cesiumIonToken, webDist, router, cloudTile }: AppOptions): Promise<FastifyInstance> {
+export async function buildApp({ store, cesiumIonToken, webDist, router, cloudTile, version }: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   // Layers like ships and news are large JSON; gzip makes them several times smaller over Tailscale.
   await app.register(fastifyCompress, { encodings: ['gzip', 'deflate'] });
@@ -30,6 +33,8 @@ export async function buildApp({ store, cesiumIonToken, webDist, router, cloudTi
   });
 
   app.get('/api/config', async () => ({ cesiumIonToken }));
+
+  app.get('/api/version', async () => version ?? {});
 
   app.get('/api/layers', async () => store.layerSummaries());
 

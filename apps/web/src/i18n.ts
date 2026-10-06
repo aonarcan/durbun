@@ -43,6 +43,11 @@ const strings = {
   onMap: { tr: 'haritada', en: 'on the map' },
   showTrails: { tr: 'İzleri göster', en: 'Show trails' },
   knownPath: { tr: 'Bilinen yol', en: 'Known path' },
+  version: { tr: 'Sürüm', en: 'Version' },
+  notOnMain: {
+    tr: 'Bu klasör "main" dalında değil, bu yüzden güncellemeler gelmez. Geçmek için: git checkout main, ardından git pull.',
+    en: 'This folder is not on the "main" branch, so it won\'t get updates. To switch: git checkout main, then git pull.',
+  },
   showMore: { tr: 'Daha fazla göster', en: 'Show more' },
   newsNote: {
     tr: 'Başlık, kısa özet ve bağlantı; haberin tamamı kaynağında. İl, başlıkta geçen ilk il adından bulunur.',
