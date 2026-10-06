@@ -22,16 +22,24 @@ export interface HttpClient {
   getText(url: string, opts?: RequestOptions): Promise<string>;
   getBuffer(url: string, opts?: RequestOptions): Promise<Buffer>;
   getJson<T = unknown>(url: string, opts?: RequestOptions): Promise<T>;
+  /** POSTs a JSON body and reads a JSON answer. */
+  postJson<T = unknown>(url: string, body: unknown, opts?: RequestOptions): Promise<T>;
 }
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 export function createHttpClient(userAgent: string, fetchImpl: FetchLike = fetch): HttpClient {
-  async function request(url: string, opts: RequestOptions): Promise<Response> {
+  async function request(url: string, opts: RequestOptions, body?: string): Promise<Response> {
     let res: Response;
     try {
       res = await fetchImpl(url, {
-        headers: { 'User-Agent': userAgent, Accept: 'application/json, text/plain, */*', ...opts.headers },
+        headers: {
+          'User-Agent': userAgent,
+          Accept: 'application/json, text/plain, */*',
+          ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+          ...opts.headers,
+        },
+        ...(body !== undefined ? { method: 'POST', body } : {}),
         signal: opts.signal ?? null,
         redirect: 'follow',
       });
@@ -53,8 +61,7 @@ export function createHttpClient(userAgent: string, fetchImpl: FetchLike = fetch
     return Buffer.from(await (await request(url, opts)).arrayBuffer());
   }
 
-  async function getJson<T>(url: string, opts: RequestOptions = {}): Promise<T> {
-    const body = await getText(url, opts);
+  function parseJson<T>(body: string): T {
     try {
       return JSON.parse(body) as T;
     } catch {
@@ -62,7 +69,15 @@ export function createHttpClient(userAgent: string, fetchImpl: FetchLike = fetch
     }
   }
 
-  return { getText, getJson, getBuffer };
+  async function getJson<T>(url: string, opts: RequestOptions = {}): Promise<T> {
+    return parseJson<T>(await getText(url, opts));
+  }
+
+  async function postJson<T>(url: string, payload: unknown, opts: RequestOptions = {}): Promise<T> {
+    return parseJson<T>(await (await request(url, opts, JSON.stringify(payload))).text());
+  }
+
+  return { getText, getJson, getBuffer, postJson };
 }
 
 function snippet(text: string): string {

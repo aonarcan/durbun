@@ -12,7 +12,7 @@ Dürbün is a live map of Türkiye that pulls Turkish public sources (AFAD, İBB
 - **Fires**: satellite heat detections from NASA FIRMS for the last 6 to 24 hours, with the province each is in.
 - **Aircraft** from adsb.fi and adsb.lol (and OpenSky with a free account), merged so each aircraft appears once, gliding between updates. In 3D they fly at their real altitude.
 - **Ships** from AISStream (free key), coloured by type; ships under way are drawn bold, ships at anchor or moored paler.
-- **Trails**: aircraft and ships leave a short fading trail, and clicking one shows the whole path the server has seen (up to 2 hours for aircraft, 12 hours for ships; aircraft paths coloured by altitude). Paths start when the server starts, since the free sources give positions only, not history.
+- **Paths**: aircraft and ships leave a short fading trail. Click an aircraft to see its whole current flight from the stand it left, coloured by altitude, with the departure and destination airports and the rest of the way dotted; stretches nobody saw are dashed. "Tüm yolu göster" fits the whole path on screen. The flight history comes from adsb.lol's traces, with OpenSky filling holes; ship paths are what the server has seen (up to 12 hours).
 - **The Straits**: when the İstanbul and Çanakkale straits are open or suspended in each direction today (KEGM), with a timeline and the ships waiting at each end.
 - **News**: the latest headlines from 15 Turkish outlets in a **Haberler** tab, with search and an outlet filter; stories that name a province in their headline can also be shown as pins on the map.
 - İBB traffic notices in İstanbul, İstanbul's on-duty pharmacies, and directions to a pharmacy by car or on foot.
@@ -119,6 +119,7 @@ Dürbün is a private, non-commercial tool. Each source is polled gently, identi
 | Province outlines | [Natural Earth](https://www.naturalearthdata.com/) admin-1 boundaries (public domain) | Bundled |
 | Fires | [NASA FIRMS](https://firms.modaps.eosdis.nasa.gov/) public 24-hour files: VIIRS on Suomi NPP, NOAA-20 and NOAA-21, and MODIS | 30 min |
 | Aircraft | [adsb.fi](https://adsb.fi) open data (30 s), [adsb.lol](https://adsb.lol) (90 s), [OpenSky](https://opensky-network.org) with a free account (75 s, to stay within its 4,000 daily credits) | |
+| Flight paths and routes | [adsb.lol](https://adsb.lol) traces (about a day per aircraft), [OpenSky](https://opensky-network.org) current-flight tracks (only when adsb.lol has holes; no account needed), [adsb.im](https://adsb.im) route database | Only when you click an aircraft; cached 3 min (traces), 15 min (OpenSky), 3 h (routes) |
 | Ships | [AISStream](https://aisstream.io) live AIS stream (free key) | Continuous; the map updates every minute |
 | Straits | [Kıyı Emniyeti Genel Müdürlüğü](https://www.kiyiemniyeti.gov.tr/bogaz_trafigi) traffic hours (may answer Turkish connections only) | 5 min |
 | News | Public RSS and Atom feeds of Anadolu Ajansı, TRT Haber, BBC Türkçe, DW Türkçe, Euronews Türkçe, Hürriyet, Sabah, Milliyet, Habertürk, NTV, CNN Türk, Sözcü, Cumhuriyet, Halk TV and Medyascope; headline, short snippet and link only | 5 min each |

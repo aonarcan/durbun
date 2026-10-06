@@ -5,6 +5,7 @@ import { createHttpClient } from './kit/http.ts';
 import { Scheduler } from './kit/scheduler.ts';
 import { Store } from './kit/store.ts';
 import { createCloudTiles } from './clouds.ts';
+import { FlightHistory } from './flights.ts';
 import { createRouter } from './routing.ts';
 import { layers, sources } from './sources/index.ts';
 import { readVersion } from './version.ts';
@@ -21,6 +22,7 @@ const app = await buildApp({
   router: createRouter(http),
   cloudTile,
   version,
+  flights: new FlightHistory(http),
 });
 
 await app.listen({ port: config.port, host: config.host });

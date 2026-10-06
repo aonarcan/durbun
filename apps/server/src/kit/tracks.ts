@@ -1,7 +1,6 @@
-import { distanceKm, type Feature } from '@durbun/core';
+import { distanceKm, type Feature, type TrackPoint } from '@durbun/core';
 
-/** [lng, lat, time (ms), altitude (m) or null]. */
-export type TrackPoint = [number, number, number, number | null];
+export type { TrackPoint };
 
 interface Track {
   layer: string;

@@ -1,8 +1,8 @@
-import { pointOf } from '@durbun/core';
+import { distanceKm, pointOf, type Airport, type TrackAnswer } from '@durbun/core';
 import type { ReactNode } from 'react';
 import { DETAIL_LABELS, KIND_LABELS, t } from '../i18n.ts';
-import { dateTime, distance, timeAgo } from '../lib/format.ts';
-import { featureCentre, trackStats } from '../lib/mapLayers.ts';
+import { clockTime, dateTime, distance, timeAgo } from '../lib/format.ts';
+import { featureCentre, trackBounds, trackStats } from '../lib/mapLayers.ts';
 import { useNow } from '../lib/useNow.ts';
 import { useData, useTracks, useUi } from '../state.ts';
 import { Directions } from './Directions.tsx';
@@ -18,7 +18,8 @@ export function InfoPanel() {
   const feature = useData((s) => (selectedId ? s.byId.get(selectedId) : undefined));
   const source = useData((s) => s.sources.find((x) => x.id === feature?.properties.source));
   const group = useData((s) => s.layers.find((l) => l.id === feature?.properties.layer)?.group);
-  const track = useTracks((s) => (s.selected && s.selected.id === selectedId ? s.selected.points : undefined));
+  const path = useTracks((s) => (s.selected && s.selected.id === selectedId ? s.selected : undefined));
+  const track = path?.points;
   const now = useNow(30_000);
 
   if (!feature) return null;
@@ -52,8 +53,27 @@ export function InfoPanel() {
               {k === 'phone' ? <a href={`tel:${String(v).replace(/\s/g, '')}`}>{String(v)}</a> : String(v)}
             </Row>
           ))}
+        {path?.route ? (
+          <>
+            <Row label={t(lang, 'departure')}>
+              <span title={path.route.from.name}>{airportName(path.route.from)}</span>
+              {path.takeoffAt && <span className="muted"> · {clockTime(new Date(path.takeoffAt).toISOString(), lang)}</span>}
+            </Row>
+            <Row label={t(lang, 'destination')}>
+              <span title={path.route.to.name}>{airportName(path.route.to)}</span>
+              {coords && (
+                <span className="muted">
+                  {' '}
+                  · {distance(distanceKm(coords, [path.route.to.lng, path.route.to.lat]) * 1000, lang)} {t(lang, 'toGo')}
+                </span>
+              )}
+            </Row>
+          </>
+        ) : (
+          path?.takeoffAt && <Row label={t(lang, 'departure')}>{clockTime(new Date(path.takeoffAt).toISOString(), lang)}</Row>
+        )}
         {track && track.length > 1 && (
-          <Row label={t(lang, 'knownPath')}>
+          <Row label={t(lang, path?.fromGround ? 'flightSoFar' : 'knownPath')}>
             {pathSummary(track, lang)}
           </Row>
         )}
@@ -63,6 +83,7 @@ export function InfoPanel() {
           </Row>
         )}
       </dl>
+      {path && p.layer === 'aircraft' && track && track.length > 1 && <p className="muted small-text path-note">{pathNote(path, lang)}</p>}
       <div className="info-actions">
         {p.url && (
           <a className="button" href={p.url} target="_blank" rel="noreferrer">
@@ -79,6 +100,18 @@ export function InfoPanel() {
             }}
           >
             {t(lang, 'zoomHere')}
+          </button>
+        )}
+        {track && track.length > 1 && (
+          <button
+            type="button"
+            className="button secondary"
+            onClick={() => {
+              const bounds = trackBounds(track, path?.route);
+              if (bounds) window.dispatchEvent(new CustomEvent('durbun:fit', { detail: bounds }));
+            }}
+          >
+            {t(lang, 'showWholePath')}
           </button>
         )}
         {source && !p.url && (
@@ -103,6 +136,18 @@ function pathSummary(points: Parameters<typeof trackStats>[0], lang: 'tr' | 'en'
   const [hu, mu] = lang === 'tr' ? ['sa', 'dk'] : ['h', 'min'];
   const time = h ? `${h} ${hu}${m ? ` ${m} ${mu}` : ''}` : `${m} ${mu}`;
   return `${time} · ${distance(km * 1000, lang)}`;
+}
+
+/** "Antalya (AYT)". */
+function airportName(a: Airport): string {
+  return `${a.city ?? a.name} (${a.iata ?? a.icao})`;
+}
+
+/** Where the path came from, and what the dashed lines mean. */
+function pathNote(path: TrackAnswer, lang: 'tr' | 'en'): string {
+  const sources = [...(path.sources ?? []), 'Dürbün'].join(', ');
+  const route = path.route ? `; ${t(lang, 'routeData')}: adsb.im` : '';
+  return `${t(lang, 'pathData')}: ${sources}${route}. ${t(lang, 'dashedUnseen')}${path.route ? t(lang, 'dashedRest') : ''}.`;
 }
 
 function Row({ label, children }: { label: string; children: ReactNode }) {

@@ -1,4 +1,4 @@
-import type { Feature, FeatureCollection, LayerSummary } from '@durbun/core';
+import type { Feature, FeatureCollection, FlightRoute, LayerSummary, TrackPoint } from '@durbun/core';
 import type {
   ExpressionSpecification,
   GeoJSONSource,
@@ -793,8 +793,7 @@ export function featureCentre(f: Feature): { lng: number; lat: number; area: boo
 
 // ---- paths of aircraft and ships ----
 
-/** [lng, lat, time (ms), altitude (m) or null]. */
-export type TrackPoint = [number, number, number, number | null];
+export type { TrackPoint };
 
 export const TRAIL_COLORS: Record<string, string> = { aircraft: '#1f78b4', ships: '#0f766e' };
 
@@ -822,24 +821,133 @@ export function tailsReachingNow(tails: FeatureCollection | undefined, current: 
   };
 }
 
-/** The selected item's path. Aircraft paths are split into pieces coloured by altitude. */
-export function trackFeatures(points: TrackPoint[], layerId: string, current?: [number, number]): FeatureCollection {
-  const pts: TrackPoint[] = current ? [...points, [current[0], current[1], Date.now(), points[points.length - 1]?.[3] ?? null]] : points;
-  if (pts.length < 2) return { type: 'FeatureCollection', features: [] };
-  const line = (coords: TrackPoint[], color: string): Feature =>
+/** Neighbouring positions further apart than both of these weren't seen in between: drawn dashed. */
+const GAP_MS = 5 * 60_000;
+const GAP_KM = 20;
+/** Unseen stretches and the rest of a route. */
+export const PATH_GAP_COLOR = '#475569';
+
+/** Kinds of feature in a drawn path. */
+export type PathPart = 'path' | 'gap' | 'plan' | 'airport';
+
+const kmBetween = (a: [number, number], b: [number, number]) => {
+  const kx = 111.32 * Math.cos((((a[1] + b[1]) / 2) * Math.PI) / 180);
+  return Math.hypot((b[0] - a[0]) * kx, (b[1] - a[1]) * 110.57);
+};
+
+/**
+ * Points along the shortest way over the globe from a to b, every 50 km or
+ * so, with longitudes kept continuous so lines don't wrap around the map.
+ */
+export function greatCircle(a: [number, number], b: [number, number]): [number, number][] {
+  const r = Math.PI / 180;
+  const [l1, p1, l2, p2] = [a[0] * r, a[1] * r, b[0] * r, b[1] * r];
+  const d = 2 * Math.asin(Math.sqrt(Math.sin((p2 - p1) / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin((l2 - l1) / 2) ** 2));
+  if (d < 1e-9) return [a, b];
+  const n = Math.min(256, Math.max(1, Math.ceil((d * 6371) / 50)));
+  const out: [number, number][] = [];
+  for (let i = 0; i <= n; i++) {
+    const f = i / n;
+    const A = Math.sin((1 - f) * d) / Math.sin(d);
+    const B = Math.sin(f * d) / Math.sin(d);
+    const x = A * Math.cos(p1) * Math.cos(l1) + B * Math.cos(p2) * Math.cos(l2);
+    const y = A * Math.cos(p1) * Math.sin(l1) + B * Math.cos(p2) * Math.sin(l2);
+    const z = A * Math.sin(p1) + B * Math.sin(p2);
+    let lng = Math.atan2(y, x) / r;
+    const prev = out[out.length - 1];
+    if (prev) while (lng - prev[0] > 180) lng -= 360;
+    if (prev) while (lng - prev[0] < -180) lng += 360;
+    out.push([Number(lng.toFixed(5)), Number((Math.atan2(z, Math.hypot(x, y)) / r).toFixed(5))]);
+  }
+  return out;
+}
+
+/**
+ * The selected item's path, as features for the map and the globe (lines
+ * carry altitude as a third coordinate):
+ * - path: what was seen, aircraft coloured by altitude band;
+ * - gap: stretches nobody saw, dashed, including from the departure airport
+ *   when the path starts in the air;
+ * - plan: the rest of the way to the destination;
+ * - airport: departure and destination.
+ */
+export function trackFeatures(
+  points: TrackPoint[],
+  layerId: string,
+  current?: [number, number],
+  route?: FlightRoute,
+  fromGround = false,
+): FeatureCollection {
+  const last = points[points.length - 1];
+  const pts: TrackPoint[] = current && last ? [...points, [current[0], current[1], Date.now(), last[3]]] : points;
+  const features: Feature[] = [];
+  const line = (coords: number[][], part: PathPart, color?: string): Feature =>
     ({
       type: 'Feature',
-      geometry: { type: 'LineString', coordinates: coords.map((p) => [p[0], p[1]]) },
-      properties: { color },
+      geometry: { type: 'LineString', coordinates: coords },
+      properties: { part, ...(color ? { color } : {}) },
     }) as unknown as Feature;
-  if (layerId !== 'aircraft') return { type: 'FeatureCollection', features: [line(pts, SHIP_COLORS.cargo!)] };
-  const features: Feature[] = [];
+  const colorOf = (p: TrackPoint) => {
+    if (layerId !== 'aircraft') return SHIP_COLORS.cargo!;
+    return PLANE_COLORS[planeBand(p[3] === 0 ? 'ground' : undefined, p[3] === null ? undefined : p[3] / 0.3048)];
+  };
+  const at = (p: TrackPoint) => [p[0], p[1], p[3] ?? 0];
+  // Runs of seen segments with the same colour become one line; unseen ones are lines of their own.
+  let run: number[][] = [];
+  let runColor = '';
+  const flush = () => {
+    if (run.length > 1) features.push(line(run, 'path', runColor));
+    run = [];
+  };
   for (let i = 1; i < pts.length; i++) {
-    const alt = pts[i]![3];
-    const band = planeBand(alt === 0 ? 'ground' : undefined, alt === null ? undefined : alt / 0.3048);
-    features.push(line([pts[i - 1]!, pts[i]!], PLANE_COLORS[band]));
+    const [a, b] = [pts[i - 1]!, pts[i]!];
+    const unseen = b[2] - a[2] > GAP_MS && kmBetween([a[0], a[1]], [b[0], b[1]]) > GAP_KM;
+    if (unseen) {
+      flush();
+      features.push(line([at(a), at(b)], 'gap'));
+      continue;
+    }
+    const color = colorOf(b);
+    if (color !== runColor) {
+      flush();
+      runColor = color;
+    }
+    if (run.length === 0) run.push(at(a));
+    run.push(at(b));
+  }
+  flush();
+
+  if (route && pts.length > 0) {
+    const first = pts[0]!;
+    const end = pts[pts.length - 1]!;
+    const from: [number, number] = [route.from.lng, route.from.lat];
+    const to: [number, number] = [route.to.lng, route.to.lat];
+    // Altitude changes evenly along these, from the ground at the airport (it shows in 3D).
+    const sloped = (a: [number, number], b: [number, number], altA: number, altB: number) => {
+      const c = greatCircle(a, b);
+      return c.map((p, i) => [p[0], p[1], Math.round(altA + ((altB - altA) * i) / Math.max(1, c.length - 1))]);
+    };
+    if (!fromGround && kmBetween(from, [first[0], first[1]]) > 5) {
+      features.push(line(sloped(from, [first[0], first[1]], 0, first[3] ?? 0), 'gap'));
+    }
+    if (kmBetween([end[0], end[1]], to) > 5) features.push(line(sloped([end[0], end[1]], to, end[3] ?? 0, 0), 'plan'));
+    for (const a of [route.from, route.to]) {
+      features.push({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [a.lng, a.lat] },
+        properties: { part: 'airport', label: a.iata ?? a.icao, name: a.name },
+      } as unknown as Feature);
+    }
   }
   return { type: 'FeatureCollection', features };
+}
+
+/** [west, south, east, north] around a path and its airports, for "show the whole path". */
+export function trackBounds(points: TrackPoint[], route?: FlightRoute): [number, number, number, number] | undefined {
+  const coords: [number, number][] = points.map((p) => [p[0], p[1]]);
+  if (route) coords.push([route.from.lng, route.from.lat], [route.to.lng, route.to.lat]);
+  if (coords.length < 2) return undefined;
+  return lineBounds(coords);
 }
 
 /** Length (km) and duration (ms) of a path. */
@@ -890,7 +998,7 @@ export function syncTrails(
   }
 }
 
-/** The selected aircraft's or ship's full path, with a white edge, under the markers. */
+/** The selected aircraft's or ship's path, with a white edge, under the markers; unseen parts and the rest of the route dashed. */
 export function syncTrack(map: MapLibreMap, fc: FeatureCollection): void {
   const data = fc as unknown as Parameters<GeoJSONSource['setData']>[0];
   const existing = map.getSource(TRACK_SOURCE) as GeoJSONSource | undefined;
@@ -900,11 +1008,33 @@ export function syncTrack(map: MapLibreMap, fc: FeatureCollection): void {
   }
   map.addSource(TRACK_SOURCE, { type: 'geojson', data: data as never });
   const before = firstPointLayer(map);
+  const part = (p: PathPart) => ['==', ['get', 'part'], p] as unknown as ExpressionSpecification;
+  map.addLayer(
+    {
+      id: `${TRACK_SOURCE}-plan`,
+      type: 'line',
+      source: TRACK_SOURCE,
+      filter: part('plan'),
+      paint: { 'line-color': PATH_GAP_COLOR, 'line-width': 2, 'line-opacity': 0.75, 'line-dasharray': [1, 2.5] },
+    },
+    before,
+  );
+  map.addLayer(
+    {
+      id: `${TRACK_SOURCE}-gap`,
+      type: 'line',
+      source: TRACK_SOURCE,
+      filter: part('gap'),
+      paint: { 'line-color': PATH_GAP_COLOR, 'line-width': 2.5, 'line-dasharray': [2, 1.5] },
+    },
+    before,
+  );
   map.addLayer(
     {
       id: `${TRACK_SOURCE}-casing`,
       type: 'line',
       source: TRACK_SOURCE,
+      filter: part('path'),
       layout: { 'line-join': 'round', 'line-cap': 'round' },
       paint: { 'line-color': '#ffffff', 'line-width': 6, 'line-opacity': 0.9 },
     },
@@ -915,9 +1045,32 @@ export function syncTrack(map: MapLibreMap, fc: FeatureCollection): void {
       id: `${TRACK_SOURCE}-line`,
       type: 'line',
       source: TRACK_SOURCE,
+      filter: part('path'),
       layout: { 'line-join': 'round', 'line-cap': 'round' },
       paint: { 'line-color': ['get', 'color'] as unknown as ExpressionSpecification, 'line-width': 3.5 },
     },
     before,
   );
+  map.addLayer({
+    id: `${TRACK_SOURCE}-airport`,
+    type: 'circle',
+    source: TRACK_SOURCE,
+    filter: part('airport'),
+    paint: { 'circle-radius': 5, 'circle-color': '#ffffff', 'circle-stroke-color': '#1e293b', 'circle-stroke-width': 2.5 },
+  });
+  map.addLayer({
+    id: `${TRACK_SOURCE}-airport-label`,
+    type: 'symbol',
+    source: TRACK_SOURCE,
+    filter: part('airport'),
+    layout: {
+      'text-field': ['get', 'label'] as unknown as ExpressionSpecification,
+      'text-font': FONT_BOLD,
+      'text-size': 13,
+      'text-anchor': 'top',
+      'text-offset': [0, 0.7],
+      'text-allow-overlap': true,
+    },
+    paint: { 'text-color': '#1e293b', 'text-halo-color': '#ffffff', 'text-halo-width': 2 },
+  });
 }
