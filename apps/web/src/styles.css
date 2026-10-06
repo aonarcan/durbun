@@ -1052,3 +1052,7 @@ th.num {
 .setup-cell {
   color: var(--warn);
 }
+
+.sub-option {
+  margin: 0 0 6px 26px;
+}

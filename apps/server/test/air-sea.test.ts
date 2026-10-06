@@ -232,7 +232,9 @@ describe('ships (AIS)', () => {
       draught: '8,5 m',
       imo: '9123456',
     });
-    expect(anchored!.properties).toMatchObject({ title: 'TEST SHIP', kind: 'unknown', style: { moving: 0, course: 46 } });
+    // At anchor without a heading: no direction (its course over ground is noise).
+    expect(anchored!.properties).toMatchObject({ title: 'TEST SHIP', kind: 'unknown' });
+    expect(anchored!.properties.style).toEqual({ moving: 0 });
     expect(anchored!.properties.details?.navStatus).toBe('Demirde');
   });
 

@@ -30,6 +30,8 @@ interface UiState {
   visible: Record<string, boolean>;
   /** Layer id → chosen time window in hours, for layers that offer one. */
   windows: Record<string, number>;
+  /** Layer id → draw trails behind moving items (on unless switched off). */
+  trails: Record<string, boolean>;
   /** Layer id → chosen minimum value (e.g. magnitude), for layers that offer one. */
   minValues: Record<string, number>;
   /** Which 3D buildings the 3D view shows (needs a Cesium ion token). */
@@ -44,6 +46,7 @@ interface UiState {
   setCamera(camera: CameraState): void;
   setVisible(layerId: string, on: boolean): void;
   setWindow(layerId: string, hours: number): void;
+  setTrails(layerId: string, on: boolean): void;
   setMinValue(layerId: string, value: number): void;
   setBuildings3d(mode: Buildings3d): void;
   select(id: string | undefined): void;
@@ -72,6 +75,7 @@ export const useUi = create<UiState>((set) => ({
   camera: saved.camera ?? DEFAULT_CAMERA,
   visible: saved.visible ?? {},
   windows: saved.windows ?? {},
+  trails: saved.trails ?? {},
   minValues: saved.minValues ?? {},
   buildings3d: saved.buildings3d ?? 'osm',
   selectedId: undefined,
@@ -83,6 +87,7 @@ export const useUi = create<UiState>((set) => ({
   setCamera: (camera) => set({ camera }),
   setVisible: (layerId, on) => set((s) => ({ visible: { ...s.visible, [layerId]: on } })),
   setWindow: (layerId, hours) => set((s) => ({ windows: { ...s.windows, [layerId]: hours } })),
+  setTrails: (layerId, on) => set((s) => ({ trails: { ...s.trails, [layerId]: on } })),
   setMinValue: (layerId, value) => set((s) => ({ minValues: { ...s.minValues, [layerId]: value } })),
   setBuildings3d: (buildings3d) => set({ buildings3d }),
   select: (selectedId) => set({ selectedId }),
@@ -103,6 +108,7 @@ useUi.subscribe((s) => {
       camera: s.camera,
       visible: s.visible,
       windows: s.windows,
+      trails: s.trails,
       minValues: s.minValues,
       buildings3d: s.buildings3d,
       panelTab: s.panelTab,
@@ -205,7 +211,58 @@ async function loadLayer(id: string): Promise<void> {
   const fc = await getJson<FeatureCollection>(`/api/layers/${encodeURIComponent(id)}`);
   const collections = { ...useData.getState().collections, [id]: fc };
   useData.setState({ collections, byId: indexFeatures(collections) });
+  if (useData.getState().layers.find((l) => l.id === id)?.tracks) {
+    void loadTails(id).catch(() => {});
+    const selected = useUi.getState().selectedId;
+    if (selected && collections[id]?.features.some((f) => f.properties.id === selected)) void loadTrack(selected);
+  }
 }
+
+// ---- paths of aircraft and ships ----
+
+/** [lng, lat, time (ms), altitude (m) or null], as the server keeps them. */
+export type TrackPoint = [number, number, number, number | null];
+
+interface TrackState {
+  /** Layer id → short trails behind every moving item. */
+  tails: Record<string, FeatureCollection>;
+  /** The selected item's full known path. */
+  selected?: { id: string; points: TrackPoint[] };
+}
+
+export const useTracks = create<TrackState>(() => ({ tails: {} }));
+
+async function loadTails(layerId: string): Promise<void> {
+  const fc = await getJson<FeatureCollection>(`/api/layers/${encodeURIComponent(layerId)}/tails`);
+  useTracks.setState((s) => ({ tails: { ...s.tails, [layerId]: fc } }));
+}
+
+let trackRequest = 0;
+
+/** Loads the path of the selected aircraft or ship (or clears it). */
+async function loadTrack(id: string | undefined): Promise<void> {
+  const req = ++trackRequest;
+  if (!id || !/^(aircraft|ship):/.test(id)) {
+    if (useTracks.getState().selected) useTracks.setState({ selected: undefined });
+    return;
+  }
+  try {
+    const res = await fetch(`/api/tracks/${encodeURIComponent(id)}`, { cache: 'no-store' });
+    if (req !== trackRequest) return;
+    if (!res.ok) {
+      useTracks.setState({ selected: undefined });
+      return;
+    }
+    const body = (await res.json()) as { id: string; points: TrackPoint[] };
+    if (req === trackRequest) useTracks.setState({ selected: body });
+  } catch {
+    // Keep whatever path is shown; the next update tries again.
+  }
+}
+
+useUi.subscribe((s, prev) => {
+  if (s.selectedId !== prev.selectedId) void loadTrack(s.selectedId);
+});
 
 async function loadAll(): Promise<void> {
   const [layers, sources] = await Promise.all([

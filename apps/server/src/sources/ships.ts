@@ -187,7 +187,9 @@ function shipFeature(s: Ship): Feature {
   const id = `ship:${s.mmsi}`;
   const category = shipCategory(s.type);
   const moving = (s.sog ?? 0) >= 0.5 && s.navStatus !== 1 && s.navStatus !== 5;
-  const course = s.heading ?? s.cog;
+  // Draw the bow the way it points: heading when the ship reports it; when it
+  // doesn't, the course over ground, which only means something while moving.
+  const course = s.heading ?? (moving ? s.cog : undefined);
   return {
     type: 'Feature',
     id,

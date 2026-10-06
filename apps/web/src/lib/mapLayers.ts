@@ -8,7 +8,7 @@ import type {
 } from 'maplibre-gl';
 import type { QuakeFocus } from './quake.ts';
 import { FONT_BOLD } from './basemaps.ts';
-import { imageData, mapImages, SHIP_COLORS } from './icons.ts';
+import { imageData, mapImages, PLANE_COLORS, planeBand, SHIP_COLORS } from './icons.ts';
 
 /** Colours for İBB notice kinds; shared by the 2D and 3D views. */
 export const KIND_COLORS: Record<string, string> = {
@@ -299,6 +299,8 @@ function specsFor(layer: LayerSummary): LayerSpecification[] {
           'icon-rotation-alignment': 'map',
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
+          // Moving ships on top of ships at rest.
+          'symbol-sort-key': ['coalesce', ['get', 's_moving'], 0] as unknown as ExpressionSpecification,
         },
       },
       {
@@ -787,4 +789,135 @@ export function featureCentre(f: Feature): { lng: number; lat: number; area: boo
   if (coords.length === 0) return undefined;
   const [w, s, e, n] = lineBounds(coords.map((c) => [c[0], c[1]]));
   return { lng: (w + e) / 2, lat: (s + n) / 2, area: true };
+}
+
+// ---- paths of aircraft and ships ----
+
+/** [lng, lat, time (ms), altitude (m) or null]. */
+export type TrackPoint = [number, number, number, number | null];
+
+export const TRAIL_COLORS: Record<string, string> = { aircraft: '#1f78b4', ships: '#0f766e' };
+
+const tailsSource = (layerId: string) => `durbun-tails-${layerId}`;
+
+/** "#1f78b4" → "rgba(31, 120, 180, 0.8)". */
+export function rgba(hex: string, alpha: number): string {
+  const [r, g, b] = [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16));
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+const TRACK_SOURCE = 'durbun-track';
+
+/** Trails that end where each aircraft is now (it has moved on since its last report). */
+export function tailsReachingNow(tails: FeatureCollection | undefined, current: Feature[]): FeatureCollection {
+  const now = new Map(current.flatMap((f) => (f.geometry?.type === 'Point' ? [[f.properties.id, f.geometry.coordinates]] : [])));
+  return {
+    type: 'FeatureCollection',
+    features: (tails?.features ?? []).flatMap((t) => {
+      if (t.geometry?.type !== 'LineString') return [];
+      const at = now.get(t.properties.id);
+      // Items no longer on the map (filtered out, or gone) lose their trail too.
+      if (!at) return [];
+      return [{ ...t, geometry: { type: 'LineString', coordinates: [...t.geometry.coordinates, [at[0], at[1]]] } } as Feature];
+    }),
+  };
+}
+
+/** The selected item's path. Aircraft paths are split into pieces coloured by altitude. */
+export function trackFeatures(points: TrackPoint[], layerId: string, current?: [number, number]): FeatureCollection {
+  const pts: TrackPoint[] = current ? [...points, [current[0], current[1], Date.now(), points[points.length - 1]?.[3] ?? null]] : points;
+  if (pts.length < 2) return { type: 'FeatureCollection', features: [] };
+  const line = (coords: TrackPoint[], color: string): Feature =>
+    ({
+      type: 'Feature',
+      geometry: { type: 'LineString', coordinates: coords.map((p) => [p[0], p[1]]) },
+      properties: { color },
+    }) as unknown as Feature;
+  if (layerId !== 'aircraft') return { type: 'FeatureCollection', features: [line(pts, SHIP_COLORS.cargo!)] };
+  const features: Feature[] = [];
+  for (let i = 1; i < pts.length; i++) {
+    const alt = pts[i]![3];
+    const band = planeBand(alt === 0 ? 'ground' : undefined, alt === null ? undefined : alt / 0.3048);
+    features.push(line([pts[i - 1]!, pts[i]!], PLANE_COLORS[band]));
+  }
+  return { type: 'FeatureCollection', features };
+}
+
+/** Length (km) and duration (ms) of a path. */
+export function trackStats(points: TrackPoint[]): { km: number; ms: number } {
+  let km = 0;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]!;
+    const b = points[i]!;
+    const kx = 111.32 * Math.cos((a[1] * Math.PI) / 180);
+    km += Math.hypot((b[0] - a[0]) * kx, (b[1] - a[1]) * 110.57);
+  }
+  return { km, ms: points.length > 1 ? points[points.length - 1]![2] - points[0]![2] : 0 };
+}
+
+/** Fading trails under the aircraft and ship icons. */
+export function syncTrails(
+  map: MapLibreMap,
+  layers: LayerSummary[],
+  tailsFor: (layer: LayerSummary) => FeatureCollection,
+  isOn: (layer: LayerSummary) => boolean,
+): void {
+  for (const layer of layers) {
+    if (!layer.tracks) continue;
+    const id = tailsSource(layer.id);
+    const data = tailsFor(layer) as unknown as Parameters<GeoJSONSource['setData']>[0];
+    const existing = map.getSource(id) as GeoJSONSource | undefined;
+    if (existing) existing.setData(data);
+    else {
+      map.addSource(id, { type: 'geojson', data: data as never, lineMetrics: true });
+      const color = TRAIL_COLORS[layer.id] ?? layer.color;
+      const icon = `${sourceId(layer.id)}-icon`;
+      map.addLayer(
+        {
+          id,
+          type: 'line',
+          source: id,
+          layout: { 'line-join': 'round', 'line-cap': 'round' },
+          paint: {
+            'line-width': 2,
+            // Faint at the tail, strong at the aircraft or ship.
+            'line-gradient': ['interpolate', ['linear'], ['line-progress'], 0, rgba(color, 0), 1, rgba(color, 0.8)] as unknown as ExpressionSpecification,
+          },
+        },
+        map.getLayer(icon) ? icon : undefined,
+      );
+    }
+    map.setLayoutProperty(id, 'visibility', isOn(layer) ? 'visible' : 'none');
+  }
+}
+
+/** The selected aircraft's or ship's full path, with a white edge, under the markers. */
+export function syncTrack(map: MapLibreMap, fc: FeatureCollection): void {
+  const data = fc as unknown as Parameters<GeoJSONSource['setData']>[0];
+  const existing = map.getSource(TRACK_SOURCE) as GeoJSONSource | undefined;
+  if (existing) {
+    existing.setData(data);
+    return;
+  }
+  map.addSource(TRACK_SOURCE, { type: 'geojson', data: data as never });
+  const before = firstPointLayer(map);
+  map.addLayer(
+    {
+      id: `${TRACK_SOURCE}-casing`,
+      type: 'line',
+      source: TRACK_SOURCE,
+      layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: { 'line-color': '#ffffff', 'line-width': 6, 'line-opacity': 0.9 },
+    },
+    before,
+  );
+  map.addLayer(
+    {
+      id: `${TRACK_SOURCE}-line`,
+      type: 'line',
+      source: TRACK_SOURCE,
+      layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: { 'line-color': ['get', 'color'] as unknown as ExpressionSpecification, 'line-width': 3.5 },
+    },
+    before,
+  );
 }

@@ -81,28 +81,38 @@ export function planeCanvas(color: string): HTMLCanvasElement {
   return c;
 }
 
-/** A moving ship: a pointed hull, bow up. A ship at rest: a small round marker. */
+/**
+ * A ship seen from above, bow up: pointed bow, straight sides, square stern
+ * and a bridge block aft. Ships at rest are drawn paler.
+ */
 export function shipCanvas(color: string, moving: boolean): HTMLCanvasElement {
   const [c, ctx] = canvas();
   ctx.translate(ICON_PX / 2, ICON_PX / 2);
   ctx.beginPath();
-  if (moving) {
-    ctx.moveTo(0, -16);
-    ctx.bezierCurveTo(6, -8, 7, -2, 7, 6);
-    ctx.lineTo(7, 14);
-    ctx.lineTo(-7, 14);
-    ctx.lineTo(-7, 6);
-    ctx.bezierCurveTo(-7, -2, -6, -8, 0, -16);
-  } else {
-    ctx.arc(0, 0, 7, 0, Math.PI * 2);
-  }
+  ctx.moveTo(0, -19);
+  ctx.bezierCurveTo(4, -15, 7, -10, 7, -5);
+  ctx.lineTo(7, 15);
+  ctx.quadraticCurveTo(7, 18, 4, 18);
+  ctx.lineTo(-4, 18);
+  ctx.quadraticCurveTo(-7, 18, -7, 15);
+  ctx.lineTo(-7, -5);
+  ctx.bezierCurveTo(-7, -10, -4, -15, 0, -19);
   ctx.closePath();
+  ctx.lineJoin = 'round';
   ctx.lineWidth = 3;
   ctx.strokeStyle = '#ffffff';
   ctx.stroke();
-  ctx.fillStyle = color;
+  ctx.fillStyle = moving ? color : mixWithWhite(color, 0.45);
   ctx.fill();
+  // bridge
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
+  ctx.fillRect(-4.5, 7, 9, 6);
   return c;
+}
+
+function mixWithWhite(hex: string, k: number): string {
+  const rgb = [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16));
+  return `rgb(${rgb.map((v) => Math.round(v + (255 - v) * k)).join(', ')})`;
 }
 
 export function imageData(c: HTMLCanvasElement): ImageData {

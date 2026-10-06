@@ -21,9 +21,13 @@ import {
   syncFocus,
   syncRasters,
   syncRoute,
+  syncTrack,
+  syncTrails,
+  tailsReachingNow,
+  trackFeatures,
   type RouteDrawing,
 } from '../lib/mapLayers.ts';
-import type { Feature, FeatureCollection, LayerSummary } from '@durbun/core';
+import { pointOf, type Feature, type FeatureCollection, type LayerSummary } from '@durbun/core';
 import { shownFeatures, type Filters } from '../lib/filters.ts';
 import { aircraftNow } from '../lib/icons.ts';
 import {
@@ -35,6 +39,7 @@ import {
   useFocus,
   useRaster,
   useRoute,
+  useTracks,
   useUi,
   type ViewMode,
 } from '../state.ts';
@@ -48,6 +53,33 @@ type View2D = Exclude<ViewMode, '3d'>;
 function featuresNow(layer: LayerSummary, fc: FeatureCollection | undefined, filters: Filters): Feature[] {
   const shown = shownFeatures(layer, fc, filters);
   return layer.id === 'aircraft' ? aircraftNow(shown, Date.now()) : shown;
+}
+
+const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] };
+
+/** Trails behind aircraft and ships, and the selected one's full path. */
+function drawPaths(map: MapLibreMap): void {
+  const data = useData.getState();
+  const ui = useUi.getState();
+  const filters = currentFilters();
+  const { tails, selected } = useTracks.getState();
+  syncTrails(
+    map,
+    data.layers,
+    (l) => tailsReachingNow(tails[l.id], featuresNow(l, data.collections[l.id], filters)),
+    (l) => isVisible(l, ui.visible) && ui.trails[l.id] !== false,
+  );
+  if (!selected) {
+    syncTrack(map, EMPTY);
+    return;
+  }
+  const layer = data.layers.find((l) => selected.id.startsWith(`${l.id === 'ships' ? 'ship' : l.id}:`) && l.tracks);
+  if (!layer || !isVisible(layer, ui.visible)) {
+    syncTrack(map, EMPTY);
+    return;
+  }
+  const item = featuresNow(layer, data.collections[layer.id], filters).find((f) => f.properties.id === selected.id);
+  syncTrack(map, trackFeatures(selected.points, layer.id, item ? pointOf(item) : undefined));
 }
 
 /** [lng, lat] or [lng, lat, zoom] for the durbun:fly event. */
@@ -76,6 +108,7 @@ export function MapView({ view }: { view: View2D }) {
   const layers = useData((s) => s.layers);
   const collections = useData((s) => s.collections);
   const visible = useUi((s) => s.visible);
+  const trails = useUi((s) => s.trails);
   const filters = useFilters();
   const lang = useUi((s) => s.lang);
   const frame = useRaster((s) => s.frame);
@@ -117,6 +150,7 @@ export function MapView({ view }: { view: View2D }) {
         (l) => isVisible(l, ui.visible),
         (l) => frameIndex(l, useRaster.getState().frame),
       );
+      drawPaths(map);
       syncRoute(map, currentRoute());
       syncFocus(map, useFocus.getState().focus);
       localiseLabels(map, ui.lang);
@@ -200,7 +234,18 @@ export function MapView({ view }: { view: View2D }) {
       (l) => featuresNow(l, collections[l.id], filters),
       (l) => isVisible(l, visible),
     );
-  }, [layers, collections, visible, filters]);
+    drawPaths(map);
+  }, [layers, collections, visible, filters, trails]);
+
+  // New trails or a newly selected path.
+  useEffect(
+    () =>
+      useTracks.subscribe(() => {
+        const map = mapRef.current;
+        if (map && styleReady.current) drawPaths(map);
+      }),
+    [],
+  );
 
   // Aircraft glide between reports (every 30 s) instead of jumping.
   const aircraftOn = layers.some((l) => l.id === 'aircraft' && isVisible(l, visible));
@@ -213,6 +258,7 @@ export function MapView({ view }: { view: View2D }) {
       if (!map || !layer || !source || !styleReady.current) return;
       const data = prepare(featuresNow(layer, useData.getState().collections.aircraft, currentFilters()));
       source.setData(data as unknown as Parameters<GeoJSONSource['setData']>[0]);
+      drawPaths(map);
     }, 1000);
     return () => clearInterval(timer);
   }, [aircraftOn]);

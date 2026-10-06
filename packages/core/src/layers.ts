@@ -27,6 +27,11 @@ export interface LayerInfo {
   /** "areas" for layers of polygons (drawn as tinted outlines); points otherwise. */
   shape?: 'points' | 'areas';
   /**
+   * Moving things whose path the server remembers: for how long, and how much
+   * of it to draw as a trail behind every item.
+   */
+  tracks?: { keepMinutes: number; tailMinutes: number };
+  /**
    * Items are also listed in a panel (news). Some have no place and appear
    * only there; the rest are pins on the map.
    */

@@ -11,7 +11,8 @@ Dürbün is a live map of Türkiye that pulls Turkish public sources (AFAD, İBB
 - **Weather**: MGM's yellow, orange and red warnings on province outlines; current temperature and wind for all 81 province centres; the last two hours of rain radar with a play button; and satellite clouds from Meteosat.
 - **Fires**: satellite heat detections from NASA FIRMS for the last 6 to 24 hours, with the province each is in.
 - **Aircraft** from adsb.fi and adsb.lol (and OpenSky with a free account), merged so each aircraft appears once, gliding between updates. In 3D they fly at their real altitude.
-- **Ships** from AISStream (free key), coloured by type, with a pointed hull when under way.
+- **Ships** from AISStream (free key), coloured by type; ships under way are drawn bold, ships at anchor or moored paler.
+- **Trails**: aircraft and ships leave a short fading trail, and clicking one shows the whole path the server has seen (up to 2 hours for aircraft, 12 hours for ships; aircraft paths coloured by altitude). Paths start when the server starts, since the free sources give positions only, not history.
 - **The Straits**: when the İstanbul and Çanakkale straits are open or suspended in each direction today (KEGM), with a timeline and the ships waiting at each end.
 - **News**: the latest headlines from 15 Turkish outlets in a **Haberler** tab, with search and an outlet filter; stories that name a province in their headline can also be shown as pins on the map.
 - İBB traffic notices in İstanbul, İstanbul's on-duty pharmacies, and directions to a pharmacy by car or on foot.
@@ -116,7 +117,7 @@ Dürbün is a private, non-commercial tool. Each source is polled gently, identi
 | Clouds | [EUMETSAT EUMETView](https://view.eumetsat.int/) Meteosat 10.8 µm infrared, turned into white clouds on the server; one picture per zoom level covers Türkiye and its neighbours | Every 10 min, only while someone has the layer on |
 | Province outlines | [Natural Earth](https://www.naturalearthdata.com/) admin-1 boundaries (public domain) | Bundled |
 | Fires | [NASA FIRMS](https://firms.modaps.eosdis.nasa.gov/) public 24-hour files: VIIRS on Suomi NPP, NOAA-20 and NOAA-21, and MODIS | 30 min |
-| Aircraft | [adsb.fi](https://adsb.fi) open data (30 s), [adsb.lol](https://adsb.lol) (1 min), [OpenSky](https://opensky-network.org) with a free account (75 s, to stay within its 4,000 daily credits) | |
+| Aircraft | [adsb.fi](https://adsb.fi) open data (30 s), [adsb.lol](https://adsb.lol) (90 s), [OpenSky](https://opensky-network.org) with a free account (75 s, to stay within its 4,000 daily credits) | |
 | Ships | [AISStream](https://aisstream.io) live AIS stream (free key) | Continuous; the map updates every minute |
 | Straits | [Kıyı Emniyeti Genel Müdürlüğü](https://www.kiyiemniyeti.gov.tr/bogaz_trafigi) traffic hours (may answer Turkish connections only) | 5 min |
 | News | Public RSS and Atom feeds of Anadolu Ajansı, TRT Haber, BBC Türkçe, DW Türkçe, Euronews Türkçe, Hürriyet, Sabah, Milliyet, Habertürk, NTV, CNN Türk, Sözcü, Cumhuriyet, Halk TV and Medyascope; headline, short snippet and link only | 5 min each |

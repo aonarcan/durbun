@@ -41,6 +41,8 @@ const strings = {
   noNews: { tr: 'Bu filtreyle haber yok.', en: 'No stories match.' },
   stories: { tr: 'haber', en: 'stories' },
   onMap: { tr: 'haritada', en: 'on the map' },
+  showTrails: { tr: 'İzleri göster', en: 'Show trails' },
+  knownPath: { tr: 'Bilinen yol', en: 'Known path' },
   showMore: { tr: 'Daha fazla göster', en: 'Show more' },
   newsNote: {
     tr: 'Başlık, kısa özet ve bağlantı; haberin tamamı kaynağında. İl, başlıkta geçen ilk il adından bulunur.',

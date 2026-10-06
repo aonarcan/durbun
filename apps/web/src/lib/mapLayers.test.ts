@@ -1,6 +1,18 @@
 import type { Feature } from '@durbun/core';
 import { describe, expect, it } from 'vitest';
-import { featureCentre, focusFeatures, prepare, quakeColor, styleLayerIds, tempColor } from './mapLayers.ts';
+import {
+  featureCentre,
+  focusFeatures,
+  prepare,
+  quakeColor,
+  rgba,
+  styleLayerIds,
+  tailsReachingNow,
+  tempColor,
+  trackFeatures,
+  trackStats,
+  type TrackPoint,
+} from './mapLayers.ts';
 import { quakeFocus } from './quake.ts';
 
 const now = Date.parse('2026-10-05T12:00:00Z');
@@ -87,5 +99,52 @@ describe('layer helpers', () => {
     const label = fc.features.find((f) => (f.properties as unknown as { part: string }).part === 'ring-label')!;
     expect(label.geometry!.coordinates[0]).toBeCloseTo(29, 4);
     expect(focusFeatures(undefined).features).toHaveLength(0);
+  });
+});
+
+describe('paths', () => {
+  const t0 = Date.parse('2026-10-06T08:00:00Z');
+  const pts: TrackPoint[] = [
+    [29, 41, t0, 0],
+    [29.1, 41, t0 + 60_000, 2000],
+    [29.2, 41, t0 + 120_000, 9000],
+  ];
+
+  it('colours an aircraft path by altitude, piece by piece', () => {
+    const fc = trackFeatures(pts, 'aircraft');
+    expect(fc.features).toHaveLength(2);
+    expect(fc.features.map((f) => (f.properties as unknown as { color: string }).color)).toEqual(['#2ca25f', '#6a3d9a']);
+    // A ship path is one line; with the current position it gains a point.
+    const ship = trackFeatures(pts, 'ships', [29.25, 41]);
+    expect(ship.features).toHaveLength(1);
+    expect(ship.features[0]!.geometry!.type === 'LineString' && ship.features[0]!.geometry!.coordinates).toHaveLength(4);
+    expect(trackFeatures(pts.slice(0, 1), 'aircraft').features).toEqual([]);
+  });
+
+  it('measures a path', () => {
+    const { km, ms } = trackStats(pts);
+    expect(ms).toBe(120_000);
+    expect(km).toBeCloseTo(16.8, 0);
+  });
+
+  it('extends trails to where each item is now, and drops trails of hidden items', () => {
+    const tails = {
+      type: 'FeatureCollection' as const,
+      features: ['a', 'b'].map((id) => ({
+        type: 'Feature' as const,
+        geometry: { type: 'LineString' as const, coordinates: [[29, 41], [29.1, 41]] as [number, number][] },
+        properties: { id, layer: 'aircraft', source: 'tracks', title: id },
+      })),
+    };
+    const now: Feature[] = [
+      { type: 'Feature', geometry: { type: 'Point', coordinates: [29.15, 41] }, properties: { id: 'a', layer: 'aircraft', source: 's', title: 'a' } },
+    ];
+    const out = tailsReachingNow(tails, now);
+    expect(out.features).toHaveLength(1);
+    expect(out.features[0]!.geometry).toEqual({ type: 'LineString', coordinates: [[29, 41], [29.1, 41], [29.15, 41]] });
+  });
+
+  it('writes colours with transparency', () => {
+    expect(rgba('#1f78b4', 0.5)).toBe('rgba(31, 120, 180, 0.5)');
   });
 });

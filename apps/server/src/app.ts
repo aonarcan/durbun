@@ -41,6 +41,18 @@ export async function buildApp({ store, cesiumIonToken, webDist, router, cloudTi
 
   app.get('/api/sources', async () => store.allHealth());
 
+  // Paths of moving things: short trails for a whole layer, or one item's full path.
+  app.get<{ Params: { id: string } }>('/api/layers/:id/tails', async (req, reply) => {
+    const fc = store.tails(req.params.id);
+    if (!fc) return reply.code(404).send({ error: 'This layer has no trails' });
+    return fc;
+  });
+  app.get<{ Params: { id: string } }>('/api/tracks/:id', async (req, reply) => {
+    const points = store.track(req.params.id);
+    if (!points) return reply.code(404).send({ error: 'No path known for this item' });
+    return { id: req.params.id, points };
+  });
+
   // Province outlines for the earthquake view and warnings (Natural Earth, public domain).
   app.get('/api/provinces', async (_req, reply) => {
     reply.header('Content-Type', 'application/geo+json; charset=utf-8');

@@ -11,6 +11,7 @@ import {
   type SourceHealth,
 } from '@durbun/core';
 import { isRasterResult, type LayerDefinition, type SourceDefinition, type SourceResult } from './source.ts';
+import { TrackStore, type TrackPoint } from './tracks.ts';
 
 interface LayerState {
   info: LayerInfo;
@@ -47,6 +48,7 @@ export class Store extends EventEmitter<{ event: [ServerEvent] }> {
   private readonly layers = new Map<string, LayerState>();
   private readonly health = new Map<string, HealthState>();
   private readonly now: () => number;
+  private readonly tracks: TrackStore;
 
   constructor(
     layers: LayerDefinition[],
@@ -57,6 +59,9 @@ export class Store extends EventEmitter<{ event: [ServerEvent] }> {
   ) {
     super();
     this.now = now;
+    this.tracks = new TrackStore(
+      new Map(layers.filter((l) => l.tracks).map((l) => [l.id, l.tracks!.keepMinutes * 60_000])),
+    );
     for (const { merge, ...l } of layers) {
       const sourceIds = sources.filter((s) => s.layer === l.id).map((s) => s.id);
       this.layers.set(l.id, {
@@ -101,6 +106,7 @@ export class Store extends EventEmitter<{ event: [ServerEvent] }> {
     layer.bySource.set(sourceId, features);
     const all = this.combine(layer);
     layer.combined = all;
+    this.tracks.record(layer.info.id, all, this.now());
     const hash = createHash('sha1').update(JSON.stringify(all)).digest('hex');
     layer.updatedAt = new Date(this.now());
     if (hash === layer.hash) return;
@@ -139,6 +145,18 @@ export class Store extends EventEmitter<{ event: [ServerEvent] }> {
     const layer = this.layers.get(layerId);
     if (!layer) return undefined;
     return { type: 'FeatureCollection', features: layer.combined };
+  }
+
+  /** Where one aircraft or ship has been. */
+  track(featureId: string): TrackPoint[] | undefined {
+    return this.tracks.track(featureId);
+  }
+
+  /** Short trails behind every moving item of a layer. */
+  tails(layerId: string): FeatureCollection | undefined {
+    const layer = this.layers.get(layerId);
+    if (!layer?.info.tracks) return undefined;
+    return { type: 'FeatureCollection', features: this.tracks.tails(layerId, layer.info.tracks.tailMinutes, this.now()) };
   }
 
   layerSummaries(): LayerSummary[] {

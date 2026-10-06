@@ -15,7 +15,7 @@ import {
 } from '../lib/camera.ts';
 import { shownFeatures } from '../lib/filters.ts';
 import { groundAtCentre } from '../lib/globePick.ts';
-import { extrapolate, planeBand, planeCanvas, PLANE_COLORS, SHIP_COLORS, shipCanvas } from '../lib/icons.ts';
+import { aircraftNow, extrapolate, planeBand, planeCanvas, PLANE_COLORS, SHIP_COLORS, shipCanvas } from '../lib/icons.ts';
 import {
   absoluteTileUrl,
   AFTERSHOCK_COLOR,
@@ -23,6 +23,7 @@ import {
   FOCUS_COLOR,
   KIND_COLORS,
   STRAIT_COLORS,
+  TRAIL_COLORS,
   lineBounds,
   PROVINCE_LINE_COLOR,
   quakeColor,
@@ -30,7 +31,7 @@ import {
   tempColor,
   WARNING_COLORS,
 } from '../lib/mapLayers.ts';
-import { frameIndex, isVisible, useData, useFilters, useFocus, useRaster, useRoute, useUi } from '../state.ts';
+import { frameIndex, isVisible, useData, useFilters, useFocus, useRaster, useRoute, useTracks, useUi } from '../state.ts';
 import { GlobeControls, setUpMouse } from './GlobeControls.tsx';
 import type { FlyDetail } from './MapView.tsx';
 
@@ -457,7 +458,7 @@ export default function GlobeView() {
           return;
         }
         const id = picked?.id instanceof Cesium.Entity ? picked.id.id : undefined;
-        if (id?.startsWith('route:') || id?.startsWith('focus:')) return; // drawings, not places
+        if (id?.startsWith('route:') || id?.startsWith('focus:') || id?.startsWith('trail:')) return; // drawings, not places
         // Areas and wind arrows are drawn as several entities: "<feature id>#<part>".
         useUi.getState().select(id?.split('#')[0]);
       }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
@@ -551,6 +552,94 @@ export default function GlobeView() {
     }
     viewer.scene.requestRender();
   }, [layers, collections, visible, filters, ready]);
+
+  // Trails behind aircraft (at altitude) and ships, and the selected one's full path.
+  const tails = useTracks((s) => s.tails);
+  const selectedTrack = useTracks((s) => s.selected);
+  const trails = useUi((s) => s.trails);
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer || !ready) return;
+    const ds = new Cesium.CustomDataSource('paths');
+    void viewer.dataSources.add(ds);
+    const nowAt = (f: Feature): [number, number] | undefined => pointOf(aircraftNow([f], Date.now())[0]!);
+    for (const layer of layers) {
+      if (!layer.tracks || !isVisible(layer, visible)) continue;
+      const air = layer.id === 'aircraft';
+      const items = new Map(shownFeatures(layer, collections[layer.id], filters).map((f) => [f.properties.id, f]));
+      const color = Cesium.Color.fromCssColorString(TRAIL_COLORS[layer.id] ?? layer.color).withAlpha(0.65);
+      if (trails[layer.id] !== false) {
+        for (const t of tails[layer.id]?.features ?? []) {
+          const f = items.get(t.properties.id);
+          if (t.geometry?.type !== 'LineString' || !f) continue;
+          const coords = t.geometry.coordinates;
+          if (air) {
+            const fixed = coords.flatMap((c) => [c[0], c[1], c[2] ?? 0]);
+            const alt = Number(f.properties.style?.altM ?? coords[coords.length - 1]?.[2] ?? 0);
+            ds.entities.add({
+              id: `trail:${t.properties.id}`,
+              polyline: {
+                // Ends where the aircraft is drawn now, which moves on between reports.
+                positions: new Cesium.CallbackProperty(() => {
+                  const at = nowAt(f);
+                  return Cesium.Cartesian3.fromDegreesArrayHeights(at ? [...fixed, at[0], at[1], alt] : fixed);
+                }, false),
+                width: 2,
+                material: color,
+              },
+            });
+          } else {
+            ds.entities.add({
+              id: `trail:${t.properties.id}`,
+              polyline: {
+                positions: Cesium.Cartesian3.fromDegreesArray(coords.flatMap((c) => [c[0], c[1]])),
+                clampToGround: true,
+                width: 2,
+                material: color,
+              },
+            });
+          }
+        }
+      }
+      // The selected item's whole known path, coloured by altitude for aircraft.
+      const sel = selectedTrack && items.get(selectedTrack.id);
+      if (sel && selectedTrack.points.length > 1) {
+        const pts = selectedTrack.points;
+        if (air) {
+          for (let i = 1; i < pts.length; i++) {
+            const [a, b] = [pts[i - 1]!, pts[i]!];
+            const band = planeBand(b[3] === 0 ? 'ground' : undefined, b[3] === null ? undefined : b[3] / 0.3048);
+            ds.entities.add({
+              id: `trail:path:${i}`,
+              polyline: {
+                positions: Cesium.Cartesian3.fromDegreesArrayHeights([a[0], a[1], a[3] ?? 0, b[0], b[1], b[3] ?? 0]),
+                width: 4,
+                material: new Cesium.PolylineOutlineMaterialProperty({
+                  color: Cesium.Color.fromCssColorString(PLANE_COLORS[band]),
+                  outlineColor: Cesium.Color.WHITE,
+                  outlineWidth: 1,
+                }),
+              },
+            });
+          }
+        } else {
+          ds.entities.add({
+            id: 'trail:path',
+            polyline: {
+              positions: Cesium.Cartesian3.fromDegreesArray(pts.flatMap((p) => [p[0], p[1]])),
+              clampToGround: true,
+              width: 4,
+              material: Cesium.Color.fromCssColorString(TRAIL_COLORS.ships!),
+            },
+          });
+        }
+      }
+    }
+    viewer.scene.requestRender();
+    return () => {
+      if (!viewer.isDestroyed()) void viewer.dataSources.remove(ds, true);
+    };
+  }, [ready, layers, collections, visible, filters, trails, tails, selectedTrack]);
 
   // Aircraft move on between reports, so redraw once a second while they are shown.
   const aircraftOn = layers.some((l) => l.id === 'aircraft' && isVisible(l, visible));
