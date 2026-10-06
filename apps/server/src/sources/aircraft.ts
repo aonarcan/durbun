@@ -12,12 +12,16 @@ import type { SourceContext, SourceDefinition } from '../kit/source.ts';
 /** Türkiye with the Aegean, the Black Sea coast and the borders. */
 export const AIR_AREA = { south: 34.5, north: 43.5, west: 24.5, east: 45.5 } as const;
 
-/** Four 250-nautical-mile circles along 39°N cover the area above. */
+/**
+ * Three 250-nautical-mile (463 km) circles along 39°N, 6° apart, cover
+ * Türkiye from 24°E to 47°E; where neighbouring circles meet they still
+ * reach 35.5°N–42.5°N. Three requests instead of four, because adsb.lol
+ * refuses a fourth request in quick succession (HTTP 429).
+ */
 export const CIRCLES: [lng: number, lat: number][] = [
-  [28.5, 39],
-  [33.5, 39],
-  [38.5, 39],
-  [43, 39],
+  [29.5, 39],
+  [35.5, 39],
+  [41.5, 39],
 ];
 
 /** Positions older than this are dropped rather than shown in the wrong place. */
@@ -249,16 +253,27 @@ export function mergeAircraft(a: Feature, b: Feature): Feature {
   return { ...newer, properties: { ...newer.properties, title: aircraftTitle(details), details } };
 }
 
+/**
+ * Asks for each circle in turn. If some circles fail (a rate limit, say) the
+ * others still count; the fetch fails only if every circle did.
+ */
 async function circles(
   ctx: SourceContext,
   url: (lng: number, lat: number) => string,
   gapMs: number,
 ): Promise<ReadsbResponse[]> {
   const out: ReadsbResponse[] = [];
+  let lastError: unknown;
   for (const [i, [lng, lat]] of CIRCLES.entries()) {
     if (i > 0) await new Promise((r) => setTimeout(r, gapMs)); // adsb.fi allows one request a second
-    out.push(await ctx.http.getJson<ReadsbResponse>(url(lng, lat), { signal: ctx.signal }));
+    try {
+      out.push(await ctx.http.getJson<ReadsbResponse>(url(lng, lat), { signal: ctx.signal }));
+    } catch (err) {
+      if (ctx.signal.aborted) throw err;
+      lastError = err;
+    }
   }
+  if (out.length === 0) throw lastError;
   return out;
 }
 
@@ -282,7 +297,7 @@ export const adsbLol: SourceDefinition = {
   homepage: 'https://adsb.lol/?lat=39&lon=35&zoom=6',
   // adsb.lol is stricter than adsb.fi (it answered 429, then 403, to quick repeats), so it is asked
   // less often and more slowly; over Türkiye it mostly sees aircraft adsb.fi already has.
-  intervalSec: 60,
+  intervalSec: 90,
   timeoutSec: 40,
   async fetch(ctx) {
     const res = await circles(ctx, (lng, lat) => `https://api.adsb.lol/v2/point/${lat}/${lng}/250`, 3000);
