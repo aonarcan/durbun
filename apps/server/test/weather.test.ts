@@ -53,7 +53,7 @@ describe('MGM weather warnings', () => {
     expect(kars.properties.kind).toBe('yellow');
     expect(kars.properties.validUntil).toBe('2026-10-06T19:00:15.154Z');
     expect(kars.properties.details?.districts).toBe(8);
-    expect(['Polygon', 'MultiPolygon']).toContain(kars.geometry.type);
+    expect(['Polygon', 'MultiPolygon']).toContain(kars.geometry!.type);
   });
 
   it('uses the highest level in a province and draws higher levels last', () => {
@@ -88,7 +88,7 @@ describe('MGM observations', () => {
     const ist = features.find((f) => f.id === 'mgm-now:34')!;
     expect(ist.properties.title).toBe('İstanbul 16.7 °C');
     expect(ist.properties.value).toBe(16.7);
-    expect(ist.geometry.coordinates).toEqual([28.8208, 40.9819]);
+    expect(ist.geometry!.coordinates).toEqual([28.8208, 40.9819]);
     expect(ist.properties.style).toEqual({ windDir: 75, windKmh: 8 });
     expect(ist.properties.details).toMatchObject({
       condition: 'Çok bulutlu',

@@ -1,3 +1,4 @@
+import { pointOf } from '@durbun/core';
 import type { ReactNode } from 'react';
 import { DETAIL_LABELS, KIND_LABELS, t } from '../i18n.ts';
 import { dateTime, timeAgo } from '../lib/format.ts';
@@ -7,6 +8,7 @@ import { useData, useUi } from '../state.ts';
 import { Directions } from './Directions.tsx';
 import type { FlyDetail } from './MapView.tsx';
 import { QuakeDetails } from './QuakeDetails.tsx';
+import { StraitsCard } from './StraitsCard.tsx';
 
 /** Details of the clicked feature. */
 export function InfoPanel() {
@@ -22,7 +24,7 @@ export function InfoPanel() {
   const p = feature.properties;
   const title = lang === 'en' && p.titleEn ? p.titleEn : p.title;
   const text = lang === 'en' && p.textEn ? p.textEn : p.text;
-  const coords = feature.geometry.type === 'Point' ? feature.geometry.coordinates : undefined;
+  const coords = pointOf(feature);
   const centre = featureCentre(feature);
 
   return (
@@ -56,6 +58,11 @@ export function InfoPanel() {
         )}
       </dl>
       <div className="info-actions">
+        {p.url && (
+          <a className="button" href={p.url} target="_blank" rel="noreferrer">
+            {t(lang, 'openStory')}
+          </a>
+        )}
         {centre && (
           <button
             type="button"
@@ -68,13 +75,14 @@ export function InfoPanel() {
             {t(lang, 'zoomHere')}
           </button>
         )}
-        {source && (
+        {source && !p.url && (
           <a className="button secondary" href={source.homepage} target="_blank" rel="noreferrer">
             {t(lang, 'openSource')}: {source.name[lang]}
           </a>
         )}
       </div>
       {p.layer === 'earthquakes' && <QuakeDetails feature={feature} />}
+      {p.layer === 'straits' && <StraitsCard feature={feature} />}
       {group === 'places' && <Directions feature={feature} />}
     </aside>
   );

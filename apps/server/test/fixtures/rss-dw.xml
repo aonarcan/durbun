@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns="http://purl.org/rss/1.0/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:sy="http://purl.org/rss/modules/syndication/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dwsyn="http://rss.dw.com/syndication/dwsyn/">
+ <channel rdf:about="https://rss.dw.com/syndication/feeds/rss-tur-all.1495.rdf">
+  <description>Turkish Homepage</description>
+  <link>https://www.dw.com/s-655?maca=tur-rss-tur-all-1495-rdf</link>
+  <title>DW-WORLD´s Turkish Homepage</title>
+  <sy:updatePeriod>hourly</sy:updatePeriod>
+  <sy:updateFequency>4</sy:updateFequency>
+  <sy:updateBase>2002-05-01T00:00:00Z</sy:updateBase>
+  <dc:date>2026-10-06T07:14:12Z</dc:date>
+  <image rdf:resource="https://rss.dw.com/images/DW-L-RGB_whitebg.png"/>
+  <items>
+   <rdf:Seq>
+    <rdf:li rdf:resource="https://www.dw.com/tr/aym-den-tayfun-kahraman-uyarısı-uygulanmazsa-kaosa-sürükler/a-79559243?maca=tur-rss-tur-all-1495-rdf"/>
+    <rdf:li rdf:resource="https://www.dw.com/tr/fon-soruşturması-fatma-betül-sayan-kaya-tmsf-ye-ödeme-yaptı/a-79558627?maca=tur-rss-tur-all-1495-rdf"/>
+    <rdf:li rdf:resource="https://www.dw.com/tr/mekke-ittfakı-türkiye-ve-pakistan-dan-suudi-arabistan-a-askerî-destek-kararı/a-79558619?maca=tur-rss-tur-all-1495-rdf"/>
+    <rdf:li rdf:resource="https://www.dw.com/tr/donald-trump-yapay-zeka-yerine-neden-süper-zeka-istiyor/a-79546443?maca=tur-rss-tur-all-1495-rdf"/>
+    <rdf:li rdf:resource="https://www.dw.com/tr/karadeniz-de-türk-gemisi-battı-ukrayna-rusya-yı-iha-saldırısı-ile-suçladı/a-79555722?maca=tur-rss-tur-all-1495-rdf"/>
+    <rdf:li rdf:resource="https://www.dw.com/tr/türkiye-de-fon-krizi-ekonomide-büyüme-ve-enflasyon-nasıl-etkilenecek/a-79555281?maca=tur-rss-tur-all-1495-rdf"/>
+    <rdf:li rdf:resource="https://www.dw.com/tr/uluslararası-havacılık-almanya-nın-önemi-azalırken-türkiye-ve-körfez-ülkelerinin-ağırlığı-artıyor/a-79554719?maca=tur-rss-tur-all-1495-rdf"/>
+    <rdf:li rdf:resource="https://www.dw.com/tr/imamoğlu-nun-avukatı-mehmet-pehlivan-dan-cezaevi-nakline-eziyet-tepkisi/a-79551969?maca=tur-rss-tur-all-1495-rdf"/>
+    <rdf:li rdf:resource="https://www.dw.com/tr/dünya-türkiye-de-yapılacak-iklim-konferansı-cop31-e-hazırlanıyor/a-79549797?maca=tur-rss-tur-all-1495-rdf"/>
+    <rdf:li rdf:resource="https://www.dw.com/tr/imam-taşçıer-dosyası-için-başvuru-hizbullah-izi-araştırılsın/a-79549096?maca=tur-rss-tur-all-1495-rdf"/>
+    <rdf:li rdf:resource="https://www.dw.com/tr/alman-dış-istihbaratı-bnd-rusya-ile-askerî-ihtilafa-sürüklenebiliriz/a-79549381?maca=tur-rss-tur-all-1495-rdf"/>
+    <rdf:li rdf:resource="https://www.dw.com/tr/ispanya-da-erken-seçim-kararı-franco-sonrası-bir-ilk-yaşanabilir/a-79548599?maca=tur-rss-tur-all-1495-rdf"/>
+    <rdf:li rdf:resource="https://www.dw.com/tr/nobel-tıp-ödülü-iki-alman-ve-bir-abd-li-araştırmacıya-verildi/a-79548087?maca=tur-rss-tur-all-1495-rdf"/>
+    <rdf:li rdf:resource="https://www.dw.com/tr/cemil-tugay-ve-izmir-akp-ye-mi-geçiyor/a-79546450?maca=tur-rss-tur-all-1495-rdf"/>
+    <rdf:li rdf:resource="https://www.dw.com/tr/bosna-hersek-seçimlerini-yine-milliyetçi-partiler-kazandı/a-79546061?maca=tur-rss-tur-all-1495-rdf"/>
+   </rdf:Seq>
+  </items>
+ </channel>
+ <image rdf:about="https://rss.dw.com/images/DW-L-RGB_whitebg.png">
+  <url>https://rss.dw.com/images/DW-L-RGB_whitebg.png</url>
+  <link>https://www.dw.com/s-655?maca=tur-rss-tur-all-1495-rdf</link>
+  <title>DW</title>
+  <description>News, Analysis and Service from Germany and Europe - in 30 Languages</description>
+ </image>
+ <item rdf:about="https://www.dw.com/tr/aym-den-tayfun-kahraman-uyarısı-uygulanmazsa-kaosa-sürükler/a-79559243?maca=tur-rss-tur-all-1495-rdf">
+  <title>AYM&apos;den Tayfun Kahraman uyarısı: Uygulanmazsa kaosa sürükler</title>
+  <link>https://www.dw.com/tr/aym-den-tayfun-kahraman-uyarısı-uygulanmazsa-kaosa-sürükler/a-79559243?maca=tur-rss-tur-all-1495-rdf</link>
+  <description>Anayasa Mahkemesi, verdiği ikinci Tayfun Kahraman kararında daha önce verdiği kararın uygulanmasının zorunlu olduğuna dikkat çekerek aksi halde hukuk sistemini kaosa sürükleyeceği uyarısında bulundu.</description>
+  <dc:date>2026-10-06T06:28:00Z</dc:date>
+  <dc:subject>GÜNDEM</dc:subject>
+  <dc:language>tr</dc:language>
+  <dwsyn:contentID>79559243</dwsyn:contentID>
+ </item>
+<item rdf:about="https://www.dw.com/tr/fon-soruşturması-fatma-betül-sayan-kaya-tmsf-ye-ödeme-yaptı/a-79558627?maca=tur-rss-tur-all-1495-rdf">
+  <title>Fon soruşturması: Fatma Betül Sayan Kaya TMSF&apos;ye ödeme yaptı</title>
+  <link>https://www.dw.com/tr/fon-soruşturması-fatma-betül-sayan-kaya-tmsf-ye-ödeme-yaptı/a-79558627?maca=tur-rss-tur-all-1495-rdf</link>
+  <description>İsmi fon kriziyle anılan Fatma Betül Sayan Kaya&apos;nın TMSF&apos;nin isteğe bağlı iade hesabına ödeme yaptığı kaydedildi. Kaya ve eşinin yatırımlarının ana para dışındaki kısmını gönderdiği belirtildi.</description>
+  <dc:date>2026-10-06T06:20:00Z</dc:date>
+  <dc:subject>GÜNDEM</dc:subject>
+  <dc:language>tr</dc:language>
+  <dwsyn:contentID>79558627</dwsyn:contentID>
+ </item>
+<item rdf:about="https://www.dw.com/tr/mekke-ittfakı-türkiye-ve-pakistan-dan-suudi-arabistan-a-askerî-destek-kararı/a-79558619?maca=tur-rss-tur-all-1495-rdf">
+  <title>Mekke İttfakı: Türkiye ve Pakistan&apos;dan Suudi Arabistan&apos;a askerî destek kararı</title>
+  <link>https://www.dw.com/tr/mekke-ittfakı-türkiye-ve-pakistan-dan-suudi-arabistan-a-askerî-destek-kararı/a-79558619?maca=tur-rss-tur-all-1495-rdf</link>
+  <description>Mekke İttifakı toplantısında, Türkiye ve Pakistan&apos;ın Suudi Arabistan&apos;a &quot;ivedilikle&quot; askerî destek vermesi kararı alındı.</description>
+  <dc:date>2026-10-06T06:08:00Z</dc:date>
+  <dc:subject>NRS-Import</dc:subject>
+  <dc:language>tr</dc:language>
+  <dwsyn:contentID>79558619</dwsyn:contentID>
+ </item>
+
+</rdf:RDF>

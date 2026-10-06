@@ -23,6 +23,11 @@ export interface SourceDefinition {
   timeoutSec?: number;
   /** The source refuses connections from outside Turkey. */
   requiresTurkishIp?: boolean;
+  /**
+   * Settings the source cannot work without (e.g. a free API key in .env).
+   * While any is missing the source stays switched off and the status page shows the hint.
+   */
+  setup?: { env: string[]; hint: { tr: string; en: string } };
   fetch(ctx: SourceContext): Promise<SourceResult>;
 }
 
@@ -33,5 +38,9 @@ export function isRasterResult(r: SourceResult): r is { raster: RasterInfo } {
   return !Array.isArray(r);
 }
 
-/** A layer as declared in code; its source list is filled in from the sources. */
-export type LayerDefinition = Omit<LayerInfo, 'sources'>;
+/**
+ * A layer as declared in code; its source list is filled in from the sources.
+ * With `merge`, features from several sources that share an id (the same
+ * aircraft seen by two networks) are combined into one.
+ */
+export type LayerDefinition = Omit<LayerInfo, 'sources'> & { merge?: (a: Feature, b: Feature) => Feature };

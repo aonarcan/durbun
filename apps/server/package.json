@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@durbun/core": "*",
+    "@fastify/compress": "^9.2.0",
     "@fastify/static": "^10.1.5",
     "fastify": "^5.12.5",
     "pngjs": "^7.0.0",

@@ -1,4 +1,11 @@
-import { AttributionControl, Map as MapLibreMap, NavigationControl, ScaleControl, setWorkerUrl } from 'maplibre-gl';
+import {
+  AttributionControl,
+  Map as MapLibreMap,
+  NavigationControl,
+  ScaleControl,
+  setWorkerUrl,
+  type GeoJSONSource,
+} from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import { useEffect, useRef } from 'react';
@@ -7,6 +14,8 @@ import { styleFor } from '../lib/basemaps.ts';
 import {
   lineBounds,
   localiseLabels,
+  prepare,
+  sourceId,
   styleLayerIds,
   syncDataLayers,
   syncFocus,
@@ -14,7 +23,9 @@ import {
   syncRoute,
   type RouteDrawing,
 } from '../lib/mapLayers.ts';
-import { shownFeatures } from '../lib/filters.ts';
+import type { Feature, FeatureCollection, LayerSummary } from '@durbun/core';
+import { shownFeatures, type Filters } from '../lib/filters.ts';
+import { aircraftNow } from '../lib/icons.ts';
 import {
   currentFilters,
   frameIndex,
@@ -32,6 +43,12 @@ import {
 setWorkerUrl(workerUrl);
 
 type View2D = Exclude<ViewMode, '3d'>;
+
+/** What a layer shows right now; aircraft are moved on from their last report. */
+function featuresNow(layer: LayerSummary, fc: FeatureCollection | undefined, filters: Filters): Feature[] {
+  const shown = shownFeatures(layer, fc, filters);
+  return layer.id === 'aircraft' ? aircraftNow(shown, Date.now()) : shown;
+}
 
 /** [lng, lat] or [lng, lat, zoom] for the durbun:fly event. */
 export type FlyDetail = [number, number, number?];
@@ -91,7 +108,7 @@ export function MapView({ view }: { view: View2D }) {
       syncDataLayers(
         map,
         data.layers,
-        (l) => shownFeatures(l, data.collections[l.id], filters),
+        (l) => featuresNow(l, data.collections[l.id], filters),
         (l) => isVisible(l, ui.visible),
       );
       syncRasters(
@@ -134,13 +151,22 @@ export function MapView({ view }: { view: View2D }) {
       for (const h of hits) {
         if (h.geometry.type !== 'Point') continue;
         const p = map.project(h.geometry.coordinates as [number, number]);
-        const score = Math.round(Math.hypot(p.x - e.point.x, p.y - e.point.y) / 3) * 100 - Number(h.properties?.value ?? 0);
+        const dist = Math.round(Math.hypot(p.x - e.point.x, p.y - e.point.y) / 3);
+        const score = dist * 1e6 - Math.min(Number(h.properties?.value ?? 0), 1e5);
         if (score < bestScore) {
           best = h;
           bestScore = score;
         }
       }
       const hit = best ?? hits[0];
+      // A numbered circle of news pins: zoom in until it splits.
+      if (hit?.properties?.cluster && hit.geometry.type === 'Point') {
+        const source = map.getSource(hit.source) as GeoJSONSource | undefined;
+        void source?.getClusterExpansionZoom(Number(hit.properties.cluster_id)).then((zoom) =>
+          map.easeTo({ center: hit.geometry.type === 'Point' ? (hit.geometry.coordinates as [number, number]) : map.getCenter(), zoom }),
+        );
+        return;
+      }
       useUi.getState().select(hit ? String(hit.properties?.id) : undefined);
     });
     map.on('mousemove', (e) => {
@@ -171,10 +197,25 @@ export function MapView({ view }: { view: View2D }) {
     syncDataLayers(
       map,
       layers,
-      (l) => shownFeatures(l, collections[l.id], filters),
+      (l) => featuresNow(l, collections[l.id], filters),
       (l) => isVisible(l, visible),
     );
   }, [layers, collections, visible, filters]);
+
+  // Aircraft glide between reports (every 30 s) instead of jumping.
+  const aircraftOn = layers.some((l) => l.id === 'aircraft' && isVisible(l, visible));
+  useEffect(() => {
+    if (!aircraftOn) return;
+    const timer = setInterval(() => {
+      const map = mapRef.current;
+      const layer = useData.getState().layers.find((l) => l.id === 'aircraft');
+      const source = map?.getSource(sourceId('aircraft')) as GeoJSONSource | undefined;
+      if (!map || !layer || !source || !styleReady.current) return;
+      const data = prepare(featuresNow(layer, useData.getState().collections.aircraft, currentFilters()));
+      source.setData(data as unknown as Parameters<GeoJSONSource['setData']>[0]);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [aircraftOn]);
 
   // Radar and cloud images, and the radar frame being shown.
   useEffect(() => {

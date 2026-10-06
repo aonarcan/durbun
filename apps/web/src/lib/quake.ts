@@ -1,10 +1,11 @@
 import {
   circlePolygon,
   distanceKm,
+  distanceToAreaKm,
+  pointOf,
   type Feature,
   type MultiPolygonGeometry,
   type PolygonGeometry,
-  type Position,
 } from '@durbun/core';
 
 /** A province outline as /api/provinces serves it. */
@@ -54,50 +55,8 @@ export function aftershockDays(magnitude: number): number {
   return magnitude >= 6.5 ? 10 ** (0.032 * magnitude + 2.7389) : 10 ** (0.5409 * magnitude - 0.547);
 }
 
-/** Kilometres from a point to a province: 0 inside it, else to the nearest edge. */
-export function distanceToAreaKm(p: [number, number], geometry: PolygonGeometry | MultiPolygonGeometry): number {
-  const polygons = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates;
-  // A flat projection around the point is accurate enough at these distances.
-  const kx = 111.32 * Math.cos((p[1] * Math.PI) / 180);
-  const ky = 110.57;
-  let best = Infinity;
-  for (const rings of polygons) {
-    if (insidePolygon(p, rings)) return 0;
-    for (const ring of rings) {
-      for (let i = 1; i < ring.length; i++) {
-        const a = ring[i - 1]!;
-        const b = ring[i]!;
-        best = Math.min(best, segmentKm(p, a, b, kx, ky));
-      }
-    }
-  }
-  return best;
-}
-
-function segmentKm(p: [number, number], a: Position, b: Position, kx: number, ky: number): number {
-  const ax = (a[0] - p[0]) * kx;
-  const ay = (a[1] - p[1]) * ky;
-  const bx = (b[0] - p[0]) * kx;
-  const by = (b[1] - p[1]) * ky;
-  const dx = bx - ax;
-  const dy = by - ay;
-  const len = dx * dx + dy * dy;
-  const t = len === 0 ? 0 : Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len));
-  return Math.hypot(ax + t * dx, ay + t * dy);
-}
-
-/** Even–odd rule over the outer ring and its holes. */
-function insidePolygon(p: [number, number], rings: Position[][]): boolean {
-  let inside = false;
-  for (const ring of rings) {
-    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-      const [xi, yi] = ring[i]!;
-      const [xj, yj] = ring[j]!;
-      if (yi > p[1] !== yj > p[1] && p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi) inside = !inside;
-    }
-  }
-  return inside;
-}
+/** Kilometres from a point to a province (0 inside it); shared with the server. */
+export { distanceToAreaKm };
 
 const timeOf = (f: Feature) => (f.properties.observedAt ? Date.parse(f.properties.observedAt) : NaN);
 
@@ -107,16 +66,13 @@ export function quakeFocus(
   provinces: ProvinceFeature[],
   others: Feature[],
 ): QuakeFocus | undefined {
-  if (quake.geometry.type !== 'Point') return undefined;
-  const centre: [number, number] = [quake.geometry.coordinates[0], quake.geometry.coordinates[1]];
+  const centre = pointOf(quake);
+  if (!centre) return undefined;
   const magnitude = quake.properties.value ?? 0;
   const time = timeOf(quake);
   const radii = ringsFor(magnitude);
   const reach = radii[radii.length - 1]!;
   const aftershockKm = aftershockRadiusKm(magnitude);
-
-  const pointOf = (f: Feature): [number, number] | undefined =>
-    f.geometry.type === 'Point' ? [f.geometry.coordinates[0], f.geometry.coordinates[1]] : undefined;
 
   const aftershocks = allQuakes
     .filter((f) => {
