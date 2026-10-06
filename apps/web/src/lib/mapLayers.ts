@@ -613,6 +613,19 @@ function labelAnchor(map: MapLibreMap): string | undefined {
     .layers?.find((l) => !l.id.startsWith('durbun-') && (l.type === 'symbol' || l.id === 'labels'))?.id;
 }
 
+/**
+ * Where lines of a transport network go: above the basemap's roads, bridges
+ * and railways, but under the labels that follow them.
+ */
+function networkAnchor(map: MapLibreMap): string | undefined {
+  const layers = map.getStyle().layers ?? [];
+  let lastRoad = -1;
+  layers.forEach((l, i) => {
+    if (!l.id.startsWith('durbun-') && l.type === 'line' && /road|bridge|tunnel|rail|highway|transportation|aeroway/i.test(l.id)) lastRoad = i;
+  });
+  return layers.slice(lastRoad + 1).find((l) => !l.id.startsWith('durbun-') && l.type === 'symbol')?.id ?? labelAnchor(map);
+}
+
 /** First of Dürbün's point layers: the route and image layers go under these. */
 function firstPointLayer(map: MapLibreMap): string | undefined {
   return map
@@ -670,8 +683,8 @@ export function syncDataLayers(
         // News pins in the same province gather into one numbered circle.
         ...(layer.listed ? { cluster: true, clusterRadius: 36, clusterMaxZoom: 9 } : {}),
       });
-      // Areas and networks go under the basemap's labels; points on top of everything.
-      const before = layer.shape === 'areas' || layer.shape === 'network' ? labelAnchor(map) : undefined;
+      // Areas go under the basemap's roads and labels, networks above roads but under labels; points on top.
+      const before = layer.shape === 'areas' ? labelAnchor(map) : layer.shape === 'network' ? networkAnchor(map) : undefined;
       for (const spec of specsFor(layer)) map.addLayer(spec, before);
     }
     for (const id of styleLayerIds(layer)) {
@@ -1269,11 +1282,12 @@ export function transitFeatures(
   }
   for (const st of line.stops) {
     if (direction && st.direction !== direction) continue;
-    features.push(f({ type: 'Point', coordinates: [st.lng, st.lat] }, { part: 'stop', title: st.name, id: `stop:${st.code}` }));
+    features.push(f({ type: 'Point', coordinates: [st.lng, st.lat] }, { part: 'stop', title: st.name, id: st.id ?? `stop:${st.code}` }));
   }
   for (const v of line.vehicles) {
     const at = positionOf(v.id) ?? [v.lng, v.lat];
-    features.push(f({ type: 'Point', coordinates: at }, { part: 'vehicle', title: v.doorNo, id: v.id }));
+    // Only İstanbul buses are on the map as features with their own panel.
+    features.push(f({ type: 'Point', coordinates: at }, { part: 'vehicle', title: v.doorNo, ...(v.id.startsWith('bus:') ? { id: v.id } : {}) }));
   }
   return { type: 'FeatureCollection', features };
 }

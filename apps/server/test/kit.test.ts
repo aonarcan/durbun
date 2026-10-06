@@ -67,9 +67,14 @@ describe('backoff', () => {
     expect(nextDelaySec(60, 2, mid)).toBe(120);
     expect(nextDelaySec(60, 3, mid)).toBe(240);
   });
-  it('caps at 30 minutes, or the interval if that is longer', () => {
+  it('caps at 30 minutes', () => {
     expect(nextDelaySec(60, 20, mid)).toBe(1800);
-    expect(nextDelaySec(3600, 5, mid)).toBe(3600);
+    expect(nextDelaySec(3600, 5, mid)).toBe(1800);
+  });
+  it('retries a daily source within minutes, not the next day', () => {
+    expect(nextDelaySec(86_400, 1, mid)).toBe(120);
+    expect(nextDelaySec(86_400, 3, mid)).toBe(480);
+    expect(nextDelaySec(86_400, 9, mid)).toBe(1800);
   });
 });
 

@@ -340,9 +340,11 @@ export function startLive(): () => void {
 
 // ---- İstanbul buses, stops and lines ----
 
+export type City = 'istanbul' | 'izmir';
+
 export type TransitAnswer =
-  | { kind: 'bus'; id: string; data: BusAnswer }
-  | { kind: 'stop'; id: string; data: StopAnswer };
+  | { kind: 'bus'; city: City; id: string; data: BusAnswer }
+  | { kind: 'stop'; city: City; id: string; data: StopAnswer };
 
 interface TransitState {
   /** What the server said about the selected bus or stop. */
@@ -352,18 +354,21 @@ interface TransitState {
   line?: TransitLine;
   /** The selected bus's direction on that line, drawn stronger. */
   direction?: 'G' | 'D';
-  showLine(code: string | undefined): Promise<void>;
+  /** Which city's line is drawn (İstanbul and İzmir line numbers overlap). */
+  lineCity?: City;
+  showLine(code: string | undefined, city?: City): Promise<void>;
 }
 
 export const useTransit = create<TransitState>((set) => ({
   status: 'idle',
-  async showLine(code) {
+  async showLine(code, city = 'istanbul') {
     if (!code) {
-      set({ line: undefined, direction: undefined });
+      set({ line: undefined, direction: undefined, lineCity: undefined });
       return;
     }
     try {
-      set({ line: await getJson<TransitLine>(`/api/transit/line/${encodeURIComponent(code)}`), direction: undefined });
+      const kind = city === 'izmir' ? 'izmir-line' : 'line';
+      set({ line: await getJson<TransitLine>(`/api/transit/${kind}/${encodeURIComponent(code)}`), direction: undefined, lineCity: city });
     } catch {
       // Leave the map as it is.
     }
@@ -375,26 +380,28 @@ let transitRequest = 0;
 /** Looks up the selected bus (its line) or stop (its lines and coming buses). */
 async function loadTransit(id: string | undefined, refresh = false): Promise<void> {
   const req = ++transitRequest;
-  const m = id && /^(bus|stop):(.+)$/.exec(id);
+  const m = id && /^(bus|stop|izmir-stop):(.+)$/.exec(id);
   if (!m) {
     if (useTransit.getState().answer || useTransit.getState().line) useTransit.setState({ answer: undefined, line: undefined, status: 'idle' });
     return;
   }
-  const kind = m[1] as 'bus' | 'stop';
+  const city: City = m[1] === 'izmir-stop' ? 'izmir' : 'istanbul';
+  const kind = m[1] === 'bus' ? 'bus' : 'stop';
   if (!refresh) useTransit.setState({ answer: undefined, status: 'loading', ...(kind === 'bus' ? { line: undefined } : {}) });
   try {
-    const data = await getJson<BusAnswer | StopAnswer>(`/api/transit/${kind}/${encodeURIComponent(m[2]!)}`);
+    const data = await getJson<BusAnswer | StopAnswer>(`/api/transit/${m[1]}/${encodeURIComponent(m[2]!)}`);
     if (req !== transitRequest) return;
     if (kind === 'bus') {
       const bus = data as BusAnswer;
       useTransit.setState({
-        answer: { kind, id, data: bus },
+        answer: { kind, city, id, data: bus },
         status: 'ready',
         line: bus.line,
         direction: bus.direction,
+        lineCity: city,
       });
     } else {
-      useTransit.setState({ answer: { kind, id, data: data as StopAnswer }, status: 'ready' });
+      useTransit.setState({ answer: { kind, city, id, data: data as StopAnswer }, status: 'ready' });
     }
   } catch {
     if (req === transitRequest && !refresh) useTransit.setState({ status: 'error' });
@@ -407,9 +414,9 @@ useUi.subscribe((s, prev) => {
 // Buses move and stops get new arrivals: refresh what's selected every 20 seconds.
 setInterval(() => {
   const id = useUi.getState().selectedId;
-  if (id && /^(bus|stop):/.test(id) && document.visibilityState === 'visible') void loadTransit(id, true);
-  const line = useTransit.getState().line;
-  if (line && !id?.startsWith('bus:') && document.visibilityState === 'visible') void useTransit.getState().showLine(line.code);
+  if (id && /^(bus|stop|izmir-stop):/.test(id) && document.visibilityState === 'visible') void loadTransit(id, true);
+  const { line, lineCity } = useTransit.getState();
+  if (line && !id?.startsWith('bus:') && document.visibilityState === 'visible') void useTransit.getState().showLine(line.code, lineCity);
 }, 20_000);
 
 // ---- directions ----

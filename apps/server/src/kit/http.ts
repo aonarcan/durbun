@@ -33,7 +33,19 @@ export interface HttpClient {
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 export function createHttpClient(userAgent: string, fetchImpl: FetchLike = fetch): HttpClient {
+  /** Dropped connections (resets, failed fetches) are common on some public servers: a GET is tried once more. */
   async function request(url: string, opts: RequestOptions, body?: string): Promise<Response> {
+    try {
+      return await attempt(url, opts, body);
+    } catch (err) {
+      const dropped = err instanceof HttpError && err.status === undefined && /ECONNRESET|fetch failed|socket|other side closed/i.test(err.message);
+      if (!dropped || body !== undefined || opts.signal?.aborted) throw err;
+      await new Promise((r) => setTimeout(r, 1500));
+      return attempt(url, opts, body);
+    }
+  }
+
+  async function attempt(url: string, opts: RequestOptions, body?: string): Promise<Response> {
     let res: Response;
     try {
       res = await fetchImpl(url, {

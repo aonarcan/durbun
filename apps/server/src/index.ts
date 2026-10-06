@@ -11,6 +11,7 @@ import { layers, sources } from './sources/index.ts';
 import { readVersion } from './version.ts';
 import { IstanbulTransit } from './transit.ts';
 import { RouteShapes, StopLines } from './transit-cache.ts';
+import { IzmirBusLines, IzmirTransit } from './sources/izmir.ts';
 
 const store = new Store(layers, sources, config.disabledSources);
 const http = createHttpClient(config.userAgent);
@@ -26,6 +27,7 @@ const app = await buildApp({
   version,
   flights: new FlightHistory(http),
   transit: new IstanbulTransit(http, new RouteShapes(http, config.cacheDir), new StopLines(http, config.cacheDir)),
+  izmir: new IzmirTransit(http, new IzmirBusLines(http, config.cacheDir), () => store.getCollection('bus-stops')?.features ?? []),
   onWake: (layerId) => scheduler.wake(layerId),
 });
 

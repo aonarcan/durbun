@@ -6,6 +6,8 @@ import type { Feature } from './geo.ts';
 export type TransitDirection = 'G' | 'D';
 
 export interface TransitStop {
+  /** The stop's id on the map, when it isn't "stop:<code>" (İzmir: "izmir-stop:<code>"). */
+  id?: string;
   code: string;
   name: string;
   lng: number;

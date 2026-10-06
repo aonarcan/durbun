@@ -5,6 +5,7 @@ import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { pointOf, type ServerEvent } from '@durbun/core';
 import type { FlightPaths } from './flights.ts';
+import type { IzmirTransit } from './sources/izmir.ts';
 import type { IstanbulTransit } from './transit.ts';
 import type { Store } from './kit/store.ts';
 import { PROVINCES_FILE } from './provinces.ts';
@@ -26,12 +27,14 @@ export interface AppOptions {
   flights?: FlightPaths;
   /** İstanbul bus, line and stop lookups; /api/transit answers 503 without them. */
   transit?: Pick<IstanbulTransit, 'bus' | 'line' | 'stop'>;
+  /** İzmir line and stop lookups (/api/transit/izmir-line, izmir-stop). */
+  izmir?: Pick<IzmirTransit, 'line' | 'stop'>;
   /** Someone switched on a layer nobody was watching (so its on-demand sources can start now). */
   onWake?: (layerId: string) => void;
 }
 
 /** The HTTP API plus, in production, the built web app. */
-export async function buildApp({ store, cesiumIonToken, webDist, router, cloudTile, version, flights, transit, onWake }: AppOptions): Promise<FastifyInstance> {
+export async function buildApp({ store, cesiumIonToken, webDist, router, cloudTile, version, flights, transit, izmir, onWake }: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   // Layers like ships and news are large JSON; gzip makes them several times smaller over Tailscale.
   await app.register(fastifyCompress, { encodings: ['gzip', 'deflate'] });
@@ -64,10 +67,17 @@ export async function buildApp({ store, cesiumIonToken, webDist, router, cloudTi
   // İstanbul buses, lines and stops, looked up when one is selected.
   const transitCode = /^[\p{L}\d][\p{L}\d .\-/]{0,15}$/u;
   app.get<{ Params: { kind: string; code: string } }>('/api/transit/:kind/:code', async (req, reply) => {
-    if (!transit) return reply.code(503).send({ error: 'Transit lookups are not available' });
     const { kind, code } = req.params;
     if (!transitCode.test(code)) return reply.code(400).send({ error: 'Bad code' });
+    const city = kind.startsWith('izmir-') ? izmir : transit;
+    if (!city) return reply.code(503).send({ error: 'Transit lookups are not available' });
     try {
+      if (kind === 'izmir-line') return await izmir!.line(code);
+      if (kind === 'izmir-stop') {
+        const feature = store.getCollection('bus-stops')?.features.find((f) => f.properties.id === `izmir-stop:${code}`);
+        return { ...(await izmir!.stop(code)), ...(feature ? { feature } : {}) };
+      }
+      if (!transit) return reply.code(503).send({ error: 'Transit lookups are not available' });
       const mapped = (layer: string, id: string) => store.getCollection(layer)?.features.find((f) => f.properties.id === id);
       if (kind === 'bus') {
         const feature = mapped('buses', `bus:${code}`);

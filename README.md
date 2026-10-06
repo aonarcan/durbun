@@ -4,7 +4,7 @@ Türkiye için canlı bir harita: trafik, afetler, ulaşım ve daha fazlası, te
 
 Dürbün is a live map of Türkiye that pulls Turkish public sources (AFAD, İBB and more to come) into one 2D and 3D view. It runs on your own computer and is meant for you and a few friends.
 
-**Stage 3 of 5 (public transport), İstanbul part done.** What works now:
+**Stage 3 of 5 (public transport): İstanbul and İzmir.** What works now:
 
 - Four views: regular map, satellite, night, and a 3D globe that keeps the same place when you switch. In 3D, right-drag rotates and tilts, and buttons on the right do the same.
 - **Earthquakes** from AFAD: pick the last 1 hour to 7 days and a minimum magnitude (all, 2+, 3+, 4+, 5+). Click one for the **earthquake view**: distance rings, the aftershocks recorded since, the provinces within reach, other events nearby, a link to AFAD's page for the event, and a note when it may itself be an aftershock of a bigger one. A strong earthquake (M4.5+ in the last 6 hours) puts a banner at the top of the map.
@@ -20,6 +20,10 @@ Dürbün is a live map of Türkiye that pulls Turkish public sources (AFAD, İBB
   - **Bus stops** (from zoom 14): click one for the lines calling there and the buses on their way ("3 durak önce"); tap a line to draw it.
   - **Metro, tram, funicular, cable car and Marmaray** in their official colours, lines being built dashed, and Metro İstanbul's live service notices (a disrupted line's stations turn yellow). Stations show lifts, escalators and toilets.
   - **Ferry piers** of Şehir Hatları and İDO with opening hours; the ferries themselves are on the Ships layer.
+- **İzmir public transport**, in the same layers:
+  - **ESHOT bus stops** (11,932): click one for the lines calling there and the buses on their way, counted in stops (İzmir's own live service). Tap a line to draw its route, stops and where its buses are now. İzmir has no feed of every bus at once, so buses show up through stops and lines.
+  - **Metro İzmir, the Konak, Karşıyaka and Çiğli trams, and İZBAN** in their own colours, drawn station to station (their timetable files have no track shapes).
+  - **İzdeniz piers.**
 - İBB traffic notices in İstanbul, İstanbul's on-duty pharmacies, and directions to a pharmacy by car or on foot.
 - A source status page (`Kaynak durumu`) that shows whether each source is working, how fresh its data is, and its last error.
 - Turkish first, English with one click.
@@ -130,7 +134,10 @@ Dürbün is a private, non-commercial tool. Each source is polled gently, identi
 | Bus lines, stops and notices | İETT web services on İBB's open-data gateway: stops, lines, the buses and stops of a line, line notices, yesterday's trips (to tell which line a bus runs) | Stops daily; the rest only when you click a bus or stop, cached 20 s to 6 h |
 | Bus routes and lines per stop | İBB open data: [İETT route shapes](https://data.ibb.gov.tr/dataset/iett-hat-guzergahlari) and [İETT GTFS](https://data.ibb.gov.tr/dataset/iett-gtfs-verisi) | Downloaded the first time you click a bus or stop (about 260 MB and 30 MB), boiled down into the `cache` folder (about 20 MB), refreshed every two weeks |
 | Metro, tram, Marmaray | [Metro İstanbul](https://data.ibb.gov.tr/dataset/metro-istanbul-hat-bilgisi-listesi) lines, stations and service notices; İBB [rail lines](https://data.ibb.gov.tr/dataset/rayli-ulasim-hatlari-vektor-verisi) and [stations](https://data.ibb.gov.tr/dataset/rayli-sistem-istasyon-noktalari-verisi) | Notices 5 min; network daily |
-| Ferry piers | İBB traffic map pier list (Şehir Hatları, İDO) | Daily |
+| Ferry piers | İBB traffic map pier list (Şehir Hatları, İDO); [İzdeniz](https://acikveri.bizizmir.com/dataset/izdeniz-vapur-iskeleleri) piers (İzmir open API) | Daily |
+| İzmir bus stops, routes, notices | [İzmir Büyükşehir open data](https://acikveri.bizizmir.com): ESHOT stops, line routes and notices (CSV), ESHOT GTFS for line names | Stops daily; routes built into the `cache` folder the first time you pick an İzmir stop or line (about 30 MB download), refreshed every two weeks |
+| İzmir buses coming to a stop, buses on a line | İzmir open API ([durağa yaklaşan otobüsler](https://acikveri.bizizmir.com/dataset/duraga-yaklasan-otobusler), hat otobüs konumları) | Only when you pick a stop or line, cached 20 s |
+| İzmir metro, trams, İZBAN | GTFS feeds of [Metro İzmir, İzmir Tramvayı and İZBAN](https://acikveri.bizizmir.com/dataset/toplu-ulasim-gtfs-verileri) (İZBAN's is from 2022) | Daily |
 | Straits | [Kıyı Emniyeti Genel Müdürlüğü](https://www.kiyiemniyeti.gov.tr/bogaz_trafigi) traffic hours (may answer Turkish connections only) | 5 min |
 | News | Public RSS and Atom feeds of Anadolu Ajansı, TRT Haber, BBC Türkçe, DW Türkçe, Euronews Türkçe, Hürriyet, Sabah, Milliyet, Habertürk, NTV, CNN Türk, Sözcü, Cumhuriyet, Halk TV and Medyascope; headline, short snippet and link only | 5 min each |
 | Directions | [FOSSGIS OSRM](https://routing.openstreetmap.de) (OpenStreetMap data) | On request, cached 5 min, at most 20 a minute |
@@ -147,6 +154,7 @@ And on the air, sea and news layers:
 - Aircraft and ship coverage depends on volunteer receivers, which are thin over parts of Türkiye; AIS coverage is best around İstanbul and patchy in the Aegean.
 - Aircraft whose owners asked for privacy (the FAA's LADD and PIA programmes) are shown without callsign or registration. Military aircraft get no special label.
 - Which line a bus runs isn't in İETT's fleet feed. Dürbün looks at the lines the bus ran yesterday and checks each line's live bus list; a bus out of service, or one that wasn't out yesterday, shows no line.
+- İzmir's live bus service sometimes stops answering for a while (its gateway reports "name resolution failed"); stops and lines still show, without buses, until it comes back.
 - "N durak önce" counts the stops between a bus and the stop you picked, from the stop İETT says the bus is nearest to; there is no arrival time in İETT's open data. No source gives live metro or tram positions.
 - A news pin sits a few kilometres from the province's centre, so pins for one province can be told apart; the place comes from the first province named in the headline, so it is approximate.
 
