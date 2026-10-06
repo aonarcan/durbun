@@ -83,7 +83,7 @@ export async function readRouteShapes(lines: AsyncIterable<string>): Promise<Rec
 }
 
 /** A file in the cache folder, loaded once and rebuilt in the background when missing or old. */
-abstract class CachedBuild<T> {
+export abstract class CachedBuild<T> {
   private data?: T;
   private builtAt = 0;
   private loading?: Promise<void>;

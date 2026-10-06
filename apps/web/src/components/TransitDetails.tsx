@@ -1,6 +1,6 @@
 import type { TransitLine } from '@durbun/core';
 import { t } from '../i18n.ts';
-import { useTransit, useUi } from '../state.ts';
+import { useTransit, useUi, type City } from '../state.ts';
 
 /** Turkish all-capitals names from İETT ("4.LEVENT METRO") in title case. */
 export function tidy(s: string): string {
@@ -48,9 +48,9 @@ function LineSummary({ line }: { line: TransitLine }) {
 }
 
 /** Line buttons: show a line on the map, or hide the one shown. */
-function LineChips({ codes, names }: { codes: string[]; names?: Map<string, string> }) {
+function LineChips({ codes, names, city }: { codes: string[]; names?: Map<string, string>; city: City }) {
   const lang = useUi((s) => s.lang);
-  const shown = useTransit((s) => s.line?.code);
+  const shown = useTransit((s) => (s.lineCity === city ? s.line?.code : undefined));
   const showLine = useTransit((s) => s.showLine);
   return (
     <p className="chips">
@@ -61,7 +61,7 @@ function LineChips({ codes, names }: { codes: string[]; names?: Map<string, stri
           className={`chip chip-button ${shown === code ? 'chip-on' : ''}`}
           title={names?.get(code) ? tidy(names.get(code)!) : t(lang, 'showLine')}
           aria-pressed={shown === code}
-          onClick={() => void showLine(shown === code ? undefined : code)}
+          onClick={() => void showLine(shown === code ? undefined : code, city)}
         >
           {code}
         </button>
@@ -76,7 +76,12 @@ export function TransitDetails({ id }: { id: string }) {
   const select = useUi((s) => s.select);
   const answer = useTransit((s) => (s.answer?.id === id ? s.answer : undefined));
   const status = useTransit((s) => s.status);
-  const line = useTransit((s) => s.line);
+  const lineCity = useTransit((s) => s.lineCity);
+  const shownLine = useTransit((s) => s.line);
+  const showLine = useTransit((s) => s.showLine);
+
+  // A line drawn from this city's stop or bus (İstanbul and İzmir line numbers overlap).
+  const line = answer && lineCity === answer.city ? shownLine : undefined;
 
   if (!answer) {
     return (
@@ -95,7 +100,7 @@ export function TransitDetails({ id }: { id: string }) {
           {bus.recentLines.length > 0 && (
             <>
               <h4>{t(lang, 'lineYesterday')}</h4>
-              <LineChips codes={bus.recentLines} />
+              <LineChips codes={bus.recentLines} city={answer.city} />
               {line && bus.recentLines.includes(line.code) && <LineSummary line={line} />}
             </>
           )}
@@ -135,7 +140,7 @@ export function TransitDetails({ id }: { id: string }) {
       {stop.linesPending ? (
         <p className="muted small-text">{t(lang, 'linesLoading')}</p>
       ) : (
-        <LineChips codes={stop.lines.map((l) => l.code)} names={names} />
+        <LineChips codes={stop.lines.map((l) => l.code)} names={names} city={answer.city} />
       )}
       {line && stop.lines.some((l) => l.code === line.code) && (
         <>
@@ -156,9 +161,16 @@ export function TransitDetails({ id }: { id: string }) {
                 <li key={a.vehicleId + a.line}>
                   <span className="line-badge">{a.line}</span>{' '}
                   {a.stopsAway === 0 ? t(lang, 'arriving') : `${a.stopsAway} ${t(lang, 'stopsAway')}`}{' '}
-                  <button type="button" className="link-button muted" onClick={() => select(a.vehicleId)}>
-                    {a.doorNo}
-                  </button>
+                  {a.vehicleId.startsWith('bus:') ? (
+                    <button type="button" className="link-button muted" onClick={() => select(a.vehicleId)}>
+                      {a.doorNo}
+                    </button>
+                  ) : (
+                    // İzmir buses have no layer of their own: show the bus's line instead.
+                    <button type="button" className="link-button muted" onClick={() => void showLine(a.line, answer.city)}>
+                      {t(lang, 'showLine')}
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>

@@ -230,7 +230,10 @@ export function MapView({ view }: { view: View2D }) {
         );
         return;
       }
-      useUi.getState().select(hit ? String(hit.properties?.id) : undefined);
+      const id = hit?.properties?.id;
+      // Drawings without an id (rings around İzmir buses) select nothing.
+      if (hit && id === undefined) return;
+      useUi.getState().select(id !== undefined ? String(id) : undefined);
     });
     map.on('mousemove', (e) => {
       const ids = clickable();

@@ -14,15 +14,19 @@ export interface SchedulerOptions {
   startSpreadSec?: number;
 }
 
+/** A failed source is first retried after its interval, or after two minutes if its interval is longer. */
+const FIRST_RETRY_SEC = 120;
+
 /**
  * Seconds until the next run. Success: the source's interval with ±5% jitter.
- * Failure n (1-based): interval × 2^(n−1), capped at 30 minutes (or the
- * interval, if that is longer), with ±10% jitter.
+ * Failure n (1-based): the first retry delay (the interval, at most two
+ * minutes) × 2^(n−1), capped at 30 minutes, with ±10% jitter. So a daily
+ * source that fails is tried again within minutes, not tomorrow.
  */
 export function nextDelaySec(intervalSec: number, consecutiveFailures: number, random: () => number = Math.random): number {
   if (consecutiveFailures <= 0) return intervalSec * (0.95 + random() * 0.1);
-  const cap = Math.max(intervalSec, MAX_BACKOFF_SEC);
-  const backoff = Math.min(intervalSec * 2 ** (consecutiveFailures - 1), cap);
+  const first = Math.min(intervalSec, FIRST_RETRY_SEC);
+  const backoff = Math.min(first * 2 ** (consecutiveFailures - 1), Math.max(first, MAX_BACKOFF_SEC));
   return backoff * (0.9 + random() * 0.2);
 }
 

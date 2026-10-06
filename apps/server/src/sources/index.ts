@@ -8,6 +8,7 @@ import { aisStream } from './ships.ts';
 import { ibbIncidents } from './ibb-incidents.ts';
 import { iettBuses, iettStops } from './iett.ts';
 import { ibbPiers, metroIstanbul } from './istanbul-rail.ts';
+import { izdenizPiers, izmirRail, izmirStops } from './izmir.ts';
 import { ibbPharmacies } from './ibb-pharmacies.ts';
 import { mgmObservations } from './mgm-observations.ts';
 import { mgmWarnings } from './mgm-warnings.ts';
@@ -87,31 +88,31 @@ export const layers: LayerDefinition[] = [
   },
   {
     id: 'bus-stops',
-    name: { tr: 'Otobüs durakları (İstanbul)', en: 'Bus stops (İstanbul)' },
+    name: { tr: 'Otobüs durakları (İstanbul, İzmir)', en: 'Bus stops (İstanbul, İzmir)' },
     group: 'transport',
     color: '#c2255c',
     defaultOn: false,
-    attribution: 'İETT',
+    attribution: 'İETT, ESHOT',
     lazy: true,
     minZoom: 14,
   },
   {
     id: 'metro',
-    name: { tr: 'Metro, tramvay ve Marmaray (İstanbul)', en: 'Metro, tram and Marmaray (İstanbul)' },
+    name: { tr: 'Metro, tramvay ve banliyö (İstanbul, İzmir)', en: 'Metro, tram and suburban rail (İstanbul, İzmir)' },
     group: 'transport',
     color: '#009944',
     defaultOn: false,
-    attribution: 'Metro İstanbul, İBB',
+    attribution: 'Metro İstanbul, İBB, Metro İzmir, İZBAN',
     shape: 'network',
   },
   {
     id: 'piers',
-    name: { tr: 'Vapur iskeleleri (İstanbul)', en: 'Ferry piers (İstanbul)' },
+    name: { tr: 'Vapur iskeleleri (İstanbul, İzmir)', en: 'Ferry piers (İstanbul, İzmir)' },
     group: 'transport',
     color: '#1971c2',
     glyph: 'V',
     defaultOn: false,
-    attribution: 'İBB (Şehir Hatları, İDO)',
+    attribution: 'İBB (Şehir Hatları, İDO), İzdeniz',
   },
   {
     id: 'pharmacies',
@@ -168,6 +169,9 @@ export const sources: SourceDefinition[] = [
   iettStops,
   metroIstanbul(),
   ibbPiers,
+  izmirStops,
+  izmirRail,
+  izdenizPiers,
   ibbPharmacies,
   mgmWarnings,
   mgmObservations,

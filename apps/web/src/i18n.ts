@@ -254,6 +254,7 @@ export const KIND_LABELS: Record<string, { tr: string; en: string }> = {
   'station-disrupted': { tr: 'İstasyon: hatta aksama var', en: 'Station: line disrupted' },
   ido: { tr: 'İDO iskelesi', en: 'İDO pier' },
   'sehir-hatlari': { tr: 'Şehir Hatları iskelesi', en: 'Şehir Hatları pier' },
+  izdeniz: { tr: 'İzdeniz iskelesi', en: 'İzdeniz pier' },
 };
 
 /** Labels for the per-feature "details" keys collectors produce. */
@@ -328,4 +329,7 @@ export const DETAIL_LABELS: Record<string, { tr: string; en: string }> = {
   babyRoom: { tr: 'Bebek bakım odası', en: 'Baby room' },
   masjid: { tr: 'Mescit', en: 'Prayer room' },
   parking: { tr: 'Otopark', en: 'Parking' },
+  city: { tr: 'Şehir', en: 'City' },
+  lines: { tr: 'Hatlar', en: 'Lines' },
+  carFerry: { tr: 'Arabalı vapur iskelesi', en: 'Car ferry pier' },
 };

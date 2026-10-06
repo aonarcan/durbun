@@ -21,5 +21,6 @@ Third-party data keeps its own terms:
 - Aircraft positions: adsb.fi, adsb.lol (ODbL) and The OpenSky Network. Flight histories: adsb.lol traces (ODbL) and OpenSky tracks. Flight routes: adsb.im route database.
 - Ship positions: AISStream.io.
 - İstanbul buses, stops, lines, routes and timetables: İETT, rail lines and stations, Metro İstanbul lines, stations and notices, and the pier list: İstanbul Büyükşehir Belediyesi, under the İBB Open Data Licence (data.ibb.gov.tr).
+- İzmir bus stops, routes, notices and live bus information, İzdeniz piers, and the Metro İzmir, İzmir Tramvayı and İZBAN GTFS feeds: İzmir Büyükşehir Belediyesi, under the İzmir Metropolitan Municipality Open Data Licence (acikveri.bizizmir.com).
 - Straits traffic hours: T.C. Kıyı Emniyeti Genel Müdürlüğü.
 - News headlines and snippets belong to their outlets; Dürbün shows the headline, a short snippet and a link to the original.
