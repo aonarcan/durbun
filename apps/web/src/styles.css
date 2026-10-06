@@ -1056,3 +1056,11 @@ th.num {
 .sub-option {
   margin: 0 0 6px 26px;
 }
+
+.version-warning {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--warn) 14%, var(--panel));
+  color: var(--text);
+}

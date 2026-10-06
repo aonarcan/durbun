@@ -29,22 +29,23 @@ You need **Node.js 22 or newer**. On Windows, install the LTS version from <http
 git clone https://github.com/aonarcan/durbun.git
 cd durbun
 npm install
-npm run build
 npm start
 ```
 
-Then open <http://localhost:8080>. The first data arrives within a few seconds.
+Then open <http://localhost:8080>. The first start builds the web page (about a minute); after that the first data arrives within a few seconds.
 
 ### Updating to a new version
 
 Stop Dürbün first (Ctrl+C in its window), then:
 
 ```sh
+git checkout main
 git pull
 npm ci
-npm run build
 npm start
 ```
+
+`npm start` rebuilds the web page by itself whenever an update changed it. `git checkout main` makes sure you're on the branch that gets the updates; the server also warns at start-up, and the source status page shows the version, if the folder is on another branch.
 
 `npm ci` installs exactly the versions the repository lists and never rewrites `package-lock.json`, so the next `git pull` won't be blocked by a changed lock file. If a pull does complain about `package-lock.json`, run `git checkout -- package-lock.json` and pull again.
 

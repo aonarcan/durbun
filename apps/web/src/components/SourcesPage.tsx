@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { STATUS_LABELS, t } from '../i18n.ts';
 import { duration, interval, timeAgo } from '../lib/format.ts';
 import { useNow } from '../lib/useNow.ts';
@@ -9,6 +10,13 @@ export function SourcesPage() {
   const layers = useData((s) => s.layers);
   const lang = useUi((s) => s.lang);
   const now = useNow(5_000);
+  const [version, setVersion] = useState<{ branch?: string; commit?: string }>();
+  useEffect(() => {
+    fetch('/api/version')
+      .then((r) => (r.ok ? r.json() : {}))
+      .then(setVersion)
+      .catch(() => setVersion({}));
+  }, []);
 
   const counts = sources.reduce<Record<string, number>>((acc, s) => ({ ...acc, [s.status]: (acc[s.status] ?? 0) + 1 }), {});
   const layerName = (id: string) => layers.find((l) => l.id === id)?.name[lang] ?? id;
@@ -66,6 +74,12 @@ export function SourcesPage() {
           </tbody>
         </table>
       </div>
+      {version?.branch && version.branch !== 'main' && <p className="version-warning">{t(lang, 'notOnMain')}</p>}
+      {(version?.branch || version?.commit) && (
+        <p className="muted small-text">
+          {t(lang, 'version')}: {[version.branch, version.commit].filter(Boolean).join(' · ')}
+        </p>
+      )}
     </main>
   );
 }
