@@ -26,6 +26,11 @@ export interface LayerInfo {
   raster?: RasterInfo;
   /** "areas" for layers of polygons (drawn as tinted outlines); points otherwise. */
   shape?: 'points' | 'areas';
+  /**
+   * Items are also listed in a panel (news). Some have no place and appear
+   * only there; the rest are pins on the map.
+   */
+  listed?: boolean;
 }
 
 /** Tiles for an image layer. Several frames make an animation (e.g. the last two hours of radar). */

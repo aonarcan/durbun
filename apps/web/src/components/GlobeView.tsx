@@ -1,6 +1,6 @@
 import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
-import type { Feature, LayerSummary } from '@durbun/core';
+import { pointOf, type Feature, type LayerSummary } from '@durbun/core';
 import { useEffect, useRef, useState } from 'react';
 import { t } from '../i18n.ts';
 import { ESRI_CREDIT, ESRI_IMAGERY_URL } from '../lib/basemaps.ts';
@@ -15,11 +15,14 @@ import {
 } from '../lib/camera.ts';
 import { shownFeatures } from '../lib/filters.ts';
 import { groundAtCentre } from '../lib/globePick.ts';
+import { extrapolate, planeBand, planeCanvas, PLANE_COLORS, SHIP_COLORS, shipCanvas } from '../lib/icons.ts';
 import {
   absoluteTileUrl,
   AFTERSHOCK_COLOR,
+  FIRE_COLORS,
   FOCUS_COLOR,
   KIND_COLORS,
+  STRAIT_COLORS,
   lineBounds,
   PROVINCE_LINE_COLOR,
   quakeColor,
@@ -91,6 +94,8 @@ function readCamera(viewer: Cesium.Viewer): CameraState | undefined {
 
 function pointColour(layer: LayerSummary, f: Feature): Cesium.Color {
   if (layer.id === 'incidents') return Cesium.Color.fromCssColorString(KIND_COLORS[f.properties.kind ?? ''] ?? layer.color);
+  if (layer.id === 'fires') return Cesium.Color.fromCssColorString(FIRE_COLORS[f.properties.kind ?? ''] ?? layer.color);
+  if (layer.id === 'straits') return Cesium.Color.fromCssColorString(STRAIT_COLORS[f.properties.kind ?? ''] ?? layer.color);
   if (layer.id === 'earthquakes') {
     const t = f.properties.observedAt ? Date.parse(f.properties.observedAt) : NaN;
     return Cesium.Color.fromCssColorString(quakeColor(Number.isFinite(t) ? (Date.now() - t) / 3_600_000 : 9999));
@@ -124,6 +129,30 @@ function glyphIcon(color: string, glyph: string): HTMLCanvasElement {
   ctx.fillText(glyph, size / 2, size / 2 + 1);
   iconCache.set(key, canvas);
   return canvas;
+}
+
+/** A numbered circle for a group of news pins. */
+function clusterIcon(color: string, n: number): HTMLCanvasElement {
+  return cachedCanvas(`cluster-${color}-${n}`, () => {
+    const size = 64;
+    const c = document.createElement('canvas');
+    c.width = size;
+    c.height = size;
+    const ctx = c.getContext('2d')!;
+    ctx.beginPath();
+    ctx.arc(size / 2, size / 2, size / 2 - 4, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#ffffff';
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 26px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(n > 99 ? '99+' : String(n), size / 2, size / 2 + 1);
+    return c;
+  });
 }
 
 /** A temperature badge: a round dot in the temperature's colour with the value in it. */
@@ -199,7 +228,7 @@ const GROUND = {
 /** A warning area: a tinted province with a coloured edge. Entity ids get "#n" so picking can find the feature. */
 function addArea(ds: Cesium.CustomDataSource, layer: LayerSummary, f: Feature): void {
   const g = f.geometry;
-  const polygons = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
+  const polygons = g?.type === 'Polygon' ? [g.coordinates] : g?.type === 'MultiPolygon' ? g.coordinates : [];
   const color = Cesium.Color.fromCssColorString(WARNING_COLORS[f.properties.kind ?? ''] ?? layer.color);
   const begins = f.properties.observedAt ? Date.parse(f.properties.observedAt) : NaN;
   const active = !(begins > Date.now());
@@ -246,7 +275,87 @@ function addWeather(ds: Cesium.CustomDataSource, f: Feature, position: Cesium.Ca
   });
 }
 
+const canvasCache = new Map<string, HTMLCanvasElement>();
+function cachedCanvas(key: string, draw: () => HTMLCanvasElement): HTMLCanvasElement {
+  let c = canvasCache.get(key);
+  if (!c) {
+    c = draw();
+    canvasCache.set(key, c);
+  }
+  return c;
+}
+
+/**
+ * An aircraft at its altitude, turned to its track, with a faint line down
+ * to the ground. Its position moves on from the last report as time passes.
+ */
+function addAircraft(ds: Cesium.CustomDataSource, f: Feature): void {
+  const at = pointOf(f);
+  if (!at) return;
+  const style = f.properties.style ?? {};
+  const altM = Number(style.altM ?? 0);
+  const band = planeBand(f.properties.kind, f.properties.value);
+  const t = f.properties.observedAt ? Date.parse(f.properties.observedAt) : Date.now();
+  const where = () => {
+    const [lng, lat] =
+      f.properties.kind === 'air'
+        ? extrapolate(at[0], at[1], Number(style.speedKn) || undefined, typeof style.track === 'number' ? style.track : undefined, (Date.now() - t) / 1000)
+        : at;
+    return [lng, lat] as const;
+  };
+  const position = new Cesium.CallbackPositionProperty(() => {
+    const [lng, lat] = where();
+    return Cesium.Cartesian3.fromDegrees(lng, lat, altM);
+  }, false);
+  const start = Cesium.Cartesian3.fromDegrees(at[0], at[1], altM);
+  ds.entities.add({
+    id: f.properties.id,
+    position,
+    billboard: {
+      image: cachedCanvas(`plane-${band}`, () => planeCanvas(PLANE_COLORS[band])),
+      scale: 0.55,
+      alignedAxis: northAt(start),
+      rotation: -Cesium.Math.toRadians(Number(style.track ?? 0)),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      heightReference: altM > 0 ? Cesium.HeightReference.NONE : Cesium.HeightReference.CLAMP_TO_GROUND,
+    },
+  });
+  if (altM > 300) {
+    ds.entities.add({
+      id: `${f.properties.id}#stalk`,
+      polyline: {
+        positions: new Cesium.CallbackProperty(() => {
+          const [lng, lat] = where();
+          return Cesium.Cartesian3.fromDegreesArrayHeights([lng, lat, 0, lng, lat, altM]);
+        }, false),
+        width: 1,
+        material: Cesium.Color.WHITE.withAlpha(0.35),
+      },
+    });
+  }
+}
+
+function addShip(ds: Cesium.CustomDataSource, f: Feature, position: Cesium.Cartesian3): void {
+  const style = f.properties.style ?? {};
+  const moving = style.moving === 1;
+  const cat = f.properties.kind ?? 'unknown';
+  ds.entities.add({
+    id: f.properties.id,
+    position,
+    billboard: {
+      ...GROUND,
+      image: cachedCanvas(`ship-${cat}-${moving}`, () => shipCanvas(SHIP_COLORS[cat] ?? SHIP_COLORS.unknown!, moving)),
+      scale: 0.45,
+      alignedAxis: northAt(position),
+      rotation: -Cesium.Math.toRadians(Number(style.course ?? 0)),
+    },
+  });
+}
+
 function pointSize(layer: LayerSummary, f: Feature): number {
+  if (layer.id === 'fires') return Math.max(6, Math.min(16, 5 + Math.sqrt(f.properties.value ?? 0) * 1.2));
+  if (layer.id === 'straits') return 20;
+  if (layer.listed) return 12;
   if (layer.id === 'earthquakes') return Math.max(5, Math.min(30, 4 + (f.properties.value ?? 0) * 3.5));
   return layer.glyph ? 14 : 11;
 }
@@ -334,7 +443,19 @@ export default function GlobeView() {
 
       const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
       handler.setInputAction((click: { position: Cesium.Cartesian2 }) => {
-        const picked = viewer?.scene.pick(click.position) as { id?: Cesium.Entity } | undefined;
+        const picked = viewer?.scene.pick(click.position) as { id?: Cesium.Entity | Cesium.Entity[] } | undefined;
+        // A numbered circle of news pins: move closer until it splits.
+        if (Array.isArray(picked?.id) && viewer) {
+          const ground = viewer.scene.pickPosition(click.position);
+          if (ground) {
+            const range = Cesium.Cartesian3.distance(viewer.camera.positionWC, ground) / 3;
+            viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(ground, 0), {
+              offset: new Cesium.HeadingPitchRange(viewer.camera.heading, viewer.camera.pitch, Math.max(range, 2000)),
+              duration: 0.8,
+            });
+          }
+          return;
+        }
         const id = picked?.id instanceof Cesium.Entity ? picked.id.id : undefined;
         if (id?.startsWith('route:') || id?.startsWith('focus:')) return; // drawings, not places
         // Areas and wind arrows are drawn as several entities: "<feature id>#<part>".
@@ -363,6 +484,22 @@ export default function GlobeView() {
       let ds = sourcesRef.current.get(layer.id);
       if (!ds) {
         ds = new Cesium.CustomDataSource(layer.id);
+        if (layer.listed) {
+          // News pins in the same province gather into one numbered circle.
+          ds.clustering.enabled = true;
+          ds.clustering.pixelRange = 30;
+          ds.clustering.minimumClusterSize = 2;
+          ds.clustering.clusterEvent.addEventListener((entities, cluster) => {
+            cluster.label.show = false;
+            cluster.point.show = false;
+            cluster.billboard.show = true;
+            const n = entities.length;
+            cluster.billboard.setImage(`cluster-${layer.color}-${n}`, clusterIcon(layer.color, n));
+            cluster.billboard.scale = 0.5;
+            cluster.billboard.disableDepthTestDistance = Number.POSITIVE_INFINITY;
+            cluster.billboard.verticalOrigin = Cesium.VerticalOrigin.CENTER;
+          });
+        }
         sourcesRef.current.set(layer.id, ds);
         void viewer.dataSources.add(ds);
       }
@@ -374,11 +511,20 @@ export default function GlobeView() {
           addArea(ds, layer, f);
           continue;
         }
-        if (f.geometry.type !== 'Point') continue;
-        const [lng, lat] = f.geometry.coordinates;
+        const at = pointOf(f);
+        if (!at) continue;
+        const [lng, lat] = at;
         const position = Cesium.Cartesian3.fromDegrees(lng, lat);
         if (layer.id === 'weather-now') {
           addWeather(ds, f, position);
+          continue;
+        }
+        if (layer.id === 'aircraft') {
+          addAircraft(ds, f);
+          continue;
+        }
+        if (layer.id === 'ships') {
+          addShip(ds, f, position);
           continue;
         }
         ds.entities.add(
@@ -405,6 +551,15 @@ export default function GlobeView() {
     }
     viewer.scene.requestRender();
   }, [layers, collections, visible, filters, ready]);
+
+  // Aircraft move on between reports, so redraw once a second while they are shown.
+  const aircraftOn = layers.some((l) => l.id === 'aircraft' && isVisible(l, visible));
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer || !ready || !aircraftOn) return;
+    const timer = setInterval(() => viewer.scene.requestRender(), 1000);
+    return () => clearInterval(timer);
+  }, [ready, aircraftOn]);
 
   // Radar and cloud images: one imagery layer per frame, the next frame loaded invisibly.
   useEffect(() => {
@@ -499,10 +654,11 @@ export default function GlobeView() {
         });
       }
       for (const a of focus.aftershocks) {
-        if (a.geometry.type !== 'Point') continue;
+        const at = pointOf(a);
+        if (!at) continue;
         ds.entities.add({
           id: `focus:after:${a.properties.id}`,
-          position: Cesium.Cartesian3.fromDegrees(a.geometry.coordinates[0], a.geometry.coordinates[1]),
+          position: Cesium.Cartesian3.fromDegrees(at[0], at[1]),
           point: {
             ...GROUND,
             // A thin ring just outside the aftershock's own marker.

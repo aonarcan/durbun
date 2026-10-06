@@ -18,6 +18,7 @@ import type { ProvinceFeature, QuakeFocus } from './lib/quake.ts';
 export type ViewMode = 'map' | 'satellite' | 'dark' | '3d';
 export type Buildings3d = 'osm' | 'google' | 'off';
 export type Page = 'map' | 'sources';
+export type PanelTab = 'layers' | 'news';
 
 // ---- what the viewer chose (kept in this browser between visits) ----
 
@@ -35,6 +36,8 @@ interface UiState {
   buildings3d: Buildings3d;
   selectedId: string | undefined;
   panelOpen: boolean;
+  /** Which list the left panel shows. */
+  panelTab: PanelTab;
   page: Page;
   setView(view: ViewMode): void;
   setLang(lang: Lang): void;
@@ -45,6 +48,7 @@ interface UiState {
   setBuildings3d(mode: Buildings3d): void;
   select(id: string | undefined): void;
   setPanelOpen(open: boolean): void;
+  setPanelTab(tab: PanelTab): void;
   setPage(page: Page): void;
 }
 
@@ -72,6 +76,7 @@ export const useUi = create<UiState>((set) => ({
   buildings3d: saved.buildings3d ?? 'osm',
   selectedId: undefined,
   panelOpen: typeof window !== 'undefined' ? window.innerWidth > 720 : true,
+  panelTab: saved.panelTab ?? 'layers',
   page: pageFromHash(),
   setView: (view) => set({ view }),
   setLang: (lang) => set({ lang }),
@@ -82,6 +87,7 @@ export const useUi = create<UiState>((set) => ({
   setBuildings3d: (buildings3d) => set({ buildings3d }),
   select: (selectedId) => set({ selectedId }),
   setPanelOpen: (panelOpen) => set({ panelOpen }),
+  setPanelTab: (panelTab) => set({ panelTab }),
   setPage: (page) => {
     const hash = page === 'sources' ? '#/kaynaklar' : '#/';
     if (location.hash !== hash) history.pushState(null, '', hash);
@@ -99,6 +105,7 @@ useUi.subscribe((s) => {
       windows: s.windows,
       minValues: s.minValues,
       buildings3d: s.buildings3d,
+      panelTab: s.panelTab,
     };
     localStorage.setItem(SAVED_KEY, JSON.stringify(saved));
   } catch {

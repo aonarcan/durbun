@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
+import fastifyCompress from '@fastify/compress';
 import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { ServerEvent } from '@durbun/core';
@@ -21,6 +22,8 @@ export interface AppOptions {
 /** The HTTP API plus, in production, the built web app. */
 export async function buildApp({ store, cesiumIonToken, webDist, router, cloudTile }: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
+  // Layers like ships and news are large JSON; gzip makes them several times smaller over Tailscale.
+  await app.register(fastifyCompress, { encodings: ['gzip', 'deflate'] });
 
   app.addHook('onSend', async (req, reply) => {
     if (req.url.startsWith('/api/') && !reply.hasHeader('Cache-Control')) reply.header('Cache-Control', 'no-store');

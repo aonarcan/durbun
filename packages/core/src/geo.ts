@@ -53,13 +53,29 @@ export interface FeatureProps {
   value?: number;
   /** Extra flat values the map styles with (e.g. wind direction for an arrow). */
   style?: Record<string, number | string>;
+  /** Link to the original item (a news story). */
+  url?: string;
+  /** Planned states over time, e.g. when each direction of a strait is open. */
+  schedule?: ScheduleRow[];
+}
+
+/** One row of a schedule: a label (e.g. "Kuzey → Güney") and its periods. */
+export interface ScheduleRow {
+  label: string;
+  periods: { from: string; to: string; state: string }[];
 }
 
 export interface Feature<G extends Geometry = Geometry> {
   type: 'Feature';
   id?: string;
-  geometry: G;
+  /** Null for items without a place, such as a news story that names no province. */
+  geometry: G | null;
   properties: FeatureProps;
+}
+
+/** [lng, lat] of a point feature, or undefined for any other shape. */
+export function pointOf(f: Feature): [number, number] | undefined {
+  return f.geometry?.type === 'Point' ? [f.geometry.coordinates[0], f.geometry.coordinates[1]] : undefined;
 }
 
 export interface FeatureCollection {
@@ -119,4 +135,53 @@ export function circlePolygon(centre: [number, number], radiusKm: number, n = 96
     ring.push([Number((lng / rad).toFixed(5)), Number((lat / rad).toFixed(5))]);
   }
   return { type: 'Polygon', coordinates: [ring] };
+}
+
+/** Kilometres from a point to an area: 0 inside it, else to the nearest edge. */
+export function distanceToAreaKm(p: [number, number], geometry: PolygonGeometry | MultiPolygonGeometry): number {
+  const polygons = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates;
+  // A flat projection around the point is accurate enough at these distances.
+  const kx = 111.32 * Math.cos((p[1] * Math.PI) / 180);
+  const ky = 110.57;
+  let best = Infinity;
+  for (const rings of polygons) {
+    if (insideRings(p, rings)) return 0;
+    for (const ring of rings) {
+      for (let i = 1; i < ring.length; i++) {
+        best = Math.min(best, segmentKm(p, ring[i - 1]!, ring[i]!, kx, ky));
+      }
+    }
+  }
+  return best;
+}
+
+/** Whether a point lies inside an area (holes excluded). */
+export function insideArea(p: [number, number], geometry: PolygonGeometry | MultiPolygonGeometry): boolean {
+  const polygons = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates;
+  return polygons.some((rings) => insideRings(p, rings));
+}
+
+function segmentKm(p: [number, number], a: Position, b: Position, kx: number, ky: number): number {
+  const ax = (a[0] - p[0]) * kx;
+  const ay = (a[1] - p[1]) * ky;
+  const bx = (b[0] - p[0]) * kx;
+  const by = (b[1] - p[1]) * ky;
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len = dx * dx + dy * dy;
+  const t = len === 0 ? 0 : Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len));
+  return Math.hypot(ax + t * dx, ay + t * dy);
+}
+
+/** Even–odd rule over an outer ring and its holes. */
+function insideRings(p: [number, number], rings: Position[][]): boolean {
+  let inside = false;
+  for (const ring of rings) {
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i]!;
+      const [xj, yj] = ring[j]!;
+      if (yi > p[1] !== yj > p[1] && p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+  }
+  return inside;
 }

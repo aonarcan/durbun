@@ -58,7 +58,9 @@ export function SourcesPage() {
                 <td>{s.newestItemAt ? timeAgo(s.newestItemAt, lang, now) : '–'}</td>
                 <td className="num">{duration(s.lastDurationMs)}</td>
                 <td>{interval(s.intervalSec, lang)}</td>
-                <td className="error-cell">{s.lastError ?? ''}</td>
+                <td className={s.setupHint ? 'error-cell setup-cell' : 'error-cell'}>
+                  {s.setupHint ? s.setupHint[lang] : (s.lastError ?? '')}
+                </td>
               </tr>
             ))}
           </tbody>

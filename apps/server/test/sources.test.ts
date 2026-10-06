@@ -25,7 +25,7 @@ describe('AFAD earthquakes', () => {
     const first = features[0]!;
     expect(first.properties.title).toBe('M1.9 Sındırgı (Balıkesir)');
     expect(first.properties.value).toBe(1.9);
-    expect(first.geometry.coordinates).toEqual([28.145, 39.20517]);
+    expect(first.geometry!.coordinates).toEqual([28.145, 39.20517]);
   });
 
   it('asks for the last 7 days, newest first', () => {
@@ -47,7 +47,7 @@ describe('İBB traffic notices', () => {
 
   it('reads "lat,lng" coordinates and İstanbul local times', () => {
     const first = features[0]!;
-    expect(first.geometry.coordinates).toEqual([29.151041, 41.036617]);
+    expect(first.geometry!.coordinates).toEqual([29.151041, 41.036617]);
     expect(first.properties.observedAt).toBe('2026-10-05T17:36:28.000Z');
     expect(first.properties.validUntil).toBe('2026-10-05T18:05:00.000Z');
   });

@@ -1,3 +1,4 @@
+import { pointOf } from '@durbun/core';
 import { useState } from 'react';
 import { t } from '../i18n.ts';
 import { timeAgo } from '../lib/format.ts';
@@ -15,8 +16,9 @@ export function QuakeBanner() {
   const [dismissed, setDismissed] = useState<string | undefined>();
 
   const q = notableQuake(quakes ?? [], now);
-  if (!q || q.geometry.type !== 'Point' || q.properties.id === dismissed || q.properties.id === selectedId) return null;
-  const [lng, lat] = q.geometry.coordinates;
+  const at = q && pointOf(q);
+  if (!q || !at || q.properties.id === dismissed || q.properties.id === selectedId) return null;
+  const [lng, lat] = at;
   const m = q.properties.value ?? 0;
 
   const show = () => {

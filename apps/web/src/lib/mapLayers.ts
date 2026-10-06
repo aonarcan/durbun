@@ -8,6 +8,7 @@ import type {
 } from 'maplibre-gl';
 import type { QuakeFocus } from './quake.ts';
 import { FONT_BOLD } from './basemaps.ts';
+import { imageData, mapImages, SHIP_COLORS } from './icons.ts';
 
 /** Colours for İBB notice kinds; shared by the 2D and 3D views. */
 export const KIND_COLORS: Record<string, string> = {
@@ -76,15 +77,26 @@ function mix(a: string, b: string, k: number): string {
 export const sourceId = (layerId: string) => `durbun-${layerId}`;
 
 /** Style layer ids for a data layer, in drawing order (none for image layers). */
-export function styleLayerIds(layer: Pick<LayerSummary, 'id' | 'shape' | 'raster'>): string[] {
+export function styleLayerIds(layer: Pick<LayerSummary, 'id' | 'shape' | 'raster' | 'listed'>): string[] {
   const s = sourceId(layer.id);
   if (layer.raster) return [];
   if (layer.shape === 'areas') return [`${s}-fill`, `${s}-line`];
   if (layer.id === 'weather-now') return [`${s}-circle`, `${s}-label`, `${s}-arrow`];
+  if (layer.id === 'aircraft' || layer.id === 'ships') return [`${s}-icon`, `${s}-label`];
+  if (layer.listed) return [`${s}-cluster`, `${s}-count`, `${s}-circle`];
   return [`${s}-circle`, `${s}-label`];
 }
 
-const POINT_SUFFIX = /-(circle|label|arrow)$/;
+const POINT_SUFFIX = /-(circle|label|arrow|icon|cluster|count)$/;
+
+/** Colours for strait states and fire confidence; shared with 3D. */
+export const STRAIT_COLORS: Record<string, string> = {
+  open: '#2f9e44',
+  suspended: '#e03131',
+  partial: '#f08c00',
+  unplanned: '#868e96',
+};
+export const FIRE_COLORS: Record<string, string> = { low: '#fcc419', nominal: '#ff6a00', high: '#c92a2a' };
 
 /**
  * Adds derived properties the map styles use. MapLibre expressions can't read
@@ -94,7 +106,8 @@ const POINT_SUFFIX = /-(circle|label|arrow)$/;
 export function prepare(features: Feature[], now = Date.now()): FeatureCollection {
   return {
     type: 'FeatureCollection',
-    features: features.map((f) => {
+    // Items without a place (most news) are listed in the panel, not drawn.
+    features: features.filter((f) => f.geometry).map((f) => {
       const observed = f.properties.observedAt ? new Date(f.properties.observedAt).getTime() : NaN;
       const ageHours = Number.isFinite(observed) ? (now - observed) / 3_600_000 : 9999;
       const active = !(observed > now) ? 1 : 0;
@@ -221,6 +234,174 @@ function specsFor(layer: LayerSummary): LayerSpecification[] {
     ];
   }
 
+  if (layer.id === 'aircraft') {
+    const band = [
+      'case',
+      ['==', ['get', 'kind'], 'emergency'],
+      'durbun-plane-emergency',
+      ['==', ['get', 'kind'], 'ground'],
+      'durbun-plane-ground',
+      ['<', ['coalesce', ['get', 'value'], 0], 10000],
+      'durbun-plane-low',
+      ['<', ['coalesce', ['get', 'value'], 0], 25000],
+      'durbun-plane-mid',
+      'durbun-plane-high',
+    ] as unknown as ExpressionSpecification;
+    return [
+      {
+        id: ids[0]!,
+        type: 'symbol',
+        source,
+        layout: {
+          'icon-image': band,
+          'icon-size': ['interpolate', ['linear'], ['zoom'], 5, 0.75, 10, 1] as unknown as ExpressionSpecification,
+          'icon-rotate': ['coalesce', ['get', 's_track'], 0] as unknown as ExpressionSpecification,
+          'icon-rotation-alignment': 'map',
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+          'symbol-sort-key': ['coalesce', ['get', 'value'], 0] as unknown as ExpressionSpecification,
+        },
+      },
+      {
+        id: ids[1]!,
+        type: 'symbol',
+        source,
+        minzoom: 8,
+        layout: {
+          'text-field': ['get', 'title'],
+          'text-font': FONT_BOLD,
+          'text-size': 10,
+          'text-offset': [0, 1.5],
+          'text-optional': true,
+        },
+        paint: { 'text-color': '#14213d', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 },
+      },
+    ];
+  }
+
+  if (layer.id === 'ships') {
+    const cats = Object.keys(SHIP_COLORS);
+    const icon = [
+      'case',
+      ['==', ['get', 's_moving'], 1],
+      ['match', ['get', 'kind'], ...cats.flatMap((c) => [c, `durbun-ship-${c}`]), 'durbun-ship-unknown'],
+      ['match', ['get', 'kind'], ...cats.flatMap((c) => [c, `durbun-ship-still-${c}`]), 'durbun-ship-still-unknown'],
+    ] as unknown as ExpressionSpecification;
+    return [
+      {
+        id: ids[0]!,
+        type: 'symbol',
+        source,
+        layout: {
+          'icon-image': icon,
+          'icon-size': ['interpolate', ['linear'], ['zoom'], 5, 0.55, 11, 0.9] as unknown as ExpressionSpecification,
+          'icon-rotate': ['coalesce', ['get', 's_course'], 0] as unknown as ExpressionSpecification,
+          'icon-rotation-alignment': 'map',
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+        },
+      },
+      {
+        id: ids[1]!,
+        type: 'symbol',
+        source,
+        minzoom: 11,
+        layout: {
+          'text-field': ['get', 'title'],
+          'text-font': FONT_BOLD,
+          'text-size': 10,
+          'text-offset': [0, 1.4],
+          'text-optional': true,
+        },
+        paint: { 'text-color': '#0b3d3a', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 },
+      },
+    ];
+  }
+
+  if (layer.id === 'fires') {
+    return [
+      {
+        id: ids[0]!,
+        type: 'circle',
+        source,
+        layout: { 'circle-sort-key': ['coalesce', ['get', 'value'], 0] as unknown as ExpressionSpecification },
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['coalesce', ['get', 'value'], 0], 0, 3.5, 10, 5, 50, 8, 200, 12] as unknown as ExpressionSpecification,
+          'circle-color': kindColor(FIRE_COLORS, layer.color),
+          'circle-opacity': ['step', ['get', 'ageHours'], 0.95, 6, 0.75, 12, 0.55] as unknown as ExpressionSpecification,
+          'circle-stroke-color': '#4a1500',
+          'circle-stroke-width': 0.8,
+        },
+      },
+    ];
+  }
+
+  if (layer.id === 'straits') {
+    return [
+      {
+        id: ids[0]!,
+        type: 'circle',
+        source,
+        paint: {
+          'circle-radius': 11,
+          'circle-color': kindColor(STRAIT_COLORS, layer.color),
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 3,
+        },
+      },
+      {
+        id: ids[1]!,
+        type: 'symbol',
+        source,
+        layout: {
+          'text-field': ['match', ['get', 'id'], 'strait:istanbul', 'İstanbul Boğazı', 'strait:canakkale', 'Çanakkale Boğazı', ''] as unknown as ExpressionSpecification,
+          'text-font': FONT_BOLD,
+          'text-size': 11,
+          'text-offset': [0, 1.8],
+          'text-optional': true,
+        },
+        paint: { 'text-color': '#0b3d4d', 'text-halo-color': '#ffffff', 'text-halo-width': 1.8 },
+      },
+    ];
+  }
+
+  if (layer.listed) {
+    return [
+      {
+        id: ids[0]!,
+        type: 'circle',
+        source,
+        filter: ['has', 'point_count'],
+        paint: {
+          'circle-radius': ['step', ['get', 'point_count'], 13, 5, 16, 20, 20] as unknown as ExpressionSpecification,
+          'circle-color': layer.color,
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 2,
+        },
+      },
+      {
+        id: ids[1]!,
+        type: 'symbol',
+        source,
+        filter: ['has', 'point_count'],
+        layout: {
+          'text-field': ['get', 'point_count_abbreviated'],
+          'text-font': FONT_BOLD,
+          'text-size': 12,
+          'text-allow-overlap': true,
+        },
+        paint: { 'text-color': '#ffffff' },
+      },
+      {
+        id: ids[2]!,
+        type: 'circle',
+        source,
+        filter: ['!', ['has', 'point_count']],
+        paint: { 'circle-radius': 7, 'circle-color': layer.color, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 },
+      },
+    ];
+  }
+
   const color = layer.id === 'incidents' ? kindColor(KIND_COLORS, layer.color) : layer.color;
   const specs: LayerSpecification[] = [
     {
@@ -302,6 +483,9 @@ export function syncDataLayers(
   isOn: (layer: LayerSummary) => boolean,
 ): void {
   if (!map.hasImage(ARROW_IMAGE)) map.addImage(ARROW_IMAGE, arrowImage(), { pixelRatio: 2 });
+  if (!map.hasImage('durbun-plane-low')) {
+    for (const [name, c] of Object.entries(mapImages())) map.addImage(name, imageData(c), { pixelRatio: 2 });
+  }
   // Areas first so points always end up above them.
   const ordered = [...layers.filter((l) => l.shape === 'areas'), ...layers.filter((l) => l.shape !== 'areas')];
   for (const layer of ordered) {
@@ -312,7 +496,12 @@ export function syncDataLayers(
     if (existing && 'setData' in existing) {
       (existing as GeoJSONSource).setData(data);
     } else if (!existing) {
-      map.addSource(src, { type: 'geojson', data: data as never });
+      map.addSource(src, {
+        type: 'geojson',
+        data: data as never,
+        // News pins in the same province gather into one numbered circle.
+        ...(layer.listed ? { cluster: true, clusterRadius: 36, clusterMaxZoom: 9 } : {}),
+      });
       const before = layer.shape === 'areas' ? labelAnchor(map) : undefined;
       for (const spec of specsFor(layer)) map.addLayer(spec, before);
     }
@@ -591,6 +780,7 @@ export function lineBounds(coords: [number, number][]): [number, number, number,
 /** A point to fly to for any feature: the point itself, or the middle of an area's bounds. */
 export function featureCentre(f: Feature): { lng: number; lat: number; area: boolean } | undefined {
   const g = f.geometry;
+  if (!g) return undefined;
   if (g.type === 'Point') return { lng: g.coordinates[0], lat: g.coordinates[1], area: false };
   const coords =
     g.type === 'LineString' ? g.coordinates : g.type === 'Polygon' ? g.coordinates.flat() : g.coordinates.flat(2);

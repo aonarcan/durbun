@@ -1,5 +1,10 @@
 import type { LayerDefinition, SourceDefinition } from '../kit/source.ts';
 import { afadEarthquakes } from './afad-earthquakes.ts';
+import { adsbFi, adsbLol, mergeAircraft, openSky } from './aircraft.ts';
+import { firmsSources } from './firms.ts';
+import { kegmStraits } from './kegm-straits.ts';
+import { newsSources } from './news.ts';
+import { aisStream } from './ships.ts';
 import { ibbIncidents } from './ibb-incidents.ts';
 import { ibbPharmacies } from './ibb-pharmacies.ts';
 import { mgmObservations } from './mgm-observations.ts';
@@ -17,6 +22,15 @@ export const layers: LayerDefinition[] = [
     attribution: 'AFAD',
     timeWindows: { options: [1, 6, 24, 72, 168], default: 24 },
     minValue: { label: 'M', options: [0, 2, 3, 4, 5], default: 2 },
+  },
+  {
+    id: 'fires',
+    name: { tr: 'Yangınlar (uydu ısı tespitleri)', en: 'Fires (satellite heat detections)' },
+    group: 'hazards',
+    color: '#ff6a00',
+    defaultOn: true,
+    attribution: 'NASA FIRMS',
+    timeWindows: { options: [6, 12, 24], default: 24 },
   },
   {
     id: 'weather-warnings',
@@ -69,6 +83,40 @@ export const layers: LayerDefinition[] = [
     defaultOn: false,
     attribution: 'İBB',
   },
+  {
+    id: 'aircraft',
+    name: { tr: 'Uçaklar', en: 'Aircraft' },
+    group: 'air-sea',
+    color: '#1f78b4',
+    defaultOn: false,
+    attribution: 'adsb.fi, adsb.lol, OpenSky',
+    merge: mergeAircraft,
+  },
+  {
+    id: 'ships',
+    name: { tr: 'Gemiler', en: 'Ships' },
+    group: 'air-sea',
+    color: '#0f766e',
+    defaultOn: false,
+    attribution: 'AISStream',
+  },
+  {
+    id: 'straits',
+    name: { tr: 'Boğazlar: gemi trafiği', en: 'Straits: ship traffic' },
+    group: 'air-sea',
+    color: '#0b7285',
+    defaultOn: true,
+    attribution: 'Kıyı Emniyeti Genel Müdürlüğü',
+  },
+  {
+    id: 'news',
+    name: { tr: 'Haberler (ili belli olanlar)', en: 'News (with a province)' },
+    group: 'news',
+    color: '#5b6474',
+    defaultOn: false,
+    attribution: '15 Türk haber kaynağı',
+    listed: true,
+  },
 ];
 
 /** Every source the collectors poll. */
@@ -79,4 +127,11 @@ export const sources: SourceDefinition[] = [
   mgmWarnings,
   mgmObservations,
   rainViewerRadar,
+  ...firmsSources,
+  adsbFi,
+  adsbLol,
+  openSky,
+  aisStream,
+  kegmStraits,
+  ...newsSources,
 ];

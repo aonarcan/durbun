@@ -4,11 +4,16 @@ Türkiye için canlı bir harita: trafik, afetler, ulaşım ve daha fazlası, te
 
 Dürbün is a live map of Türkiye that pulls Turkish public sources (AFAD, İBB and more to come) into one 2D and 3D view. It runs on your own computer and is meant for you and a few friends.
 
-**Stage 2a of 5 (earthquakes and weather).** What works now:
+**Stage 2 of 5 (hazards, weather, air and sea, news).** What works now:
 
 - Four views: regular map, satellite, night, and a 3D globe that keeps the same place when you switch. In 3D, right-drag rotates and tilts, and buttons on the right do the same.
 - **Earthquakes** from AFAD: pick the last 1 hour to 7 days and a minimum magnitude (all, 2+, 3+, 4+, 5+). Click one for the **earthquake view**: distance rings, the aftershocks recorded since, the provinces within reach, other events nearby, a link to AFAD's page for the event, and a note when it may itself be an aftershock of a bigger one. A strong earthquake (M4.5+ in the last 6 hours) puts a banner at the top of the map.
 - **Weather**: MGM's yellow, orange and red warnings on province outlines; current temperature and wind for all 81 province centres; the last two hours of rain radar with a play button; and satellite clouds from Meteosat.
+- **Fires**: satellite heat detections from NASA FIRMS for the last 6 to 24 hours, with the province each is in.
+- **Aircraft** from adsb.fi and adsb.lol (and OpenSky with a free account), merged so each aircraft appears once, gliding between updates. In 3D they fly at their real altitude.
+- **Ships** from AISStream (free key), coloured by type, with a pointed hull when under way.
+- **The Straits**: when the İstanbul and Çanakkale straits are open or suspended in each direction today (KEGM), with a timeline and the ships waiting at each end.
+- **News**: the latest headlines from 15 Turkish outlets in a **Haberler** tab, with search and an outlet filter; stories that name a province in their headline can also be shown as pins on the map.
 - İBB traffic notices in İstanbul, İstanbul's on-duty pharmacies, and directions to a pharmacy by car or on foot.
 - A source status page (`Kaynak durumu`) that shows whether each source is working, how fresh its data is, and its last error.
 - Turkish first, English with one click.
@@ -29,6 +34,19 @@ npm start
 
 Then open <http://localhost:8080>. The first data arrives within a few seconds.
 
+### Updating to a new version
+
+Stop Dürbün first (Ctrl+C in its window), then:
+
+```sh
+git pull
+npm ci
+npm run build
+npm start
+```
+
+`npm ci` installs exactly the versions the repository lists and never rewrites `package-lock.json`, so the next `git pull` won't be blocked by a changed lock file. If a pull does complain about `package-lock.json`, run `git checkout -- package-lock.json` and pull again.
+
 To change settings, copy `.env.example` to `.env` and edit it. Everything is optional:
 
 | Setting | What it does |
@@ -36,6 +54,8 @@ To change settings, copy `.env.example` to `.env` and edit it. Everything is opt
 | `PORT` | Port to listen on (default 8080). |
 | `HOST` | `127.0.0.1` (default) keeps it to this computer; `0.0.0.0` lets other devices on your network or Tailscale reach it. |
 | `CESIUM_ION_TOKEN` | Free Cesium ion token (see below). Adds 3D terrain and 3D buildings. |
+| `AISSTREAM_API_KEY` | Free AISStream key for the Ships layer: sign in at <https://aisstream.io> with GitHub and create one under **API Keys**. |
+| `OPENSKY_CLIENT_ID`, `OPENSKY_CLIENT_SECRET` | Optional free OpenSky account for more aircraft: on your **Account** page at <https://opensky-network.org>, create an **API client**. |
 | `DISABLED_SOURCES` | Comma-separated source ids to switch off. |
 
 ### 3D terrain and buildings (free Cesium ion token)
@@ -95,6 +115,11 @@ Dürbün is a private, non-commercial tool. Each source is polled gently, identi
 | Rain radar | [RainViewer](https://www.rainviewer.com/api.html) public API (free tiles stop at zoom 7, so the radar gets blurry when you zoom in close) | 5 min |
 | Clouds | [EUMETSAT EUMETView](https://view.eumetsat.int/) Meteosat 10.8 µm infrared, turned into white clouds on the server; one picture per zoom level covers Türkiye and its neighbours | Every 10 min, only while someone has the layer on |
 | Province outlines | [Natural Earth](https://www.naturalearthdata.com/) admin-1 boundaries (public domain) | Bundled |
+| Fires | [NASA FIRMS](https://firms.modaps.eosdis.nasa.gov/) public 24-hour files: VIIRS on Suomi NPP, NOAA-20 and NOAA-21, and MODIS | 30 min |
+| Aircraft | [adsb.fi](https://adsb.fi) open data (30 s), [adsb.lol](https://adsb.lol) (1 min), [OpenSky](https://opensky-network.org) with a free account (75 s, to stay within its 4,000 daily credits) | |
+| Ships | [AISStream](https://aisstream.io) live AIS stream (free key) | Continuous; the map updates every minute |
+| Straits | [Kıyı Emniyeti Genel Müdürlüğü](https://www.kiyiemniyeti.gov.tr/bogaz_trafigi) traffic hours (may answer Turkish connections only) | 5 min |
+| News | Public RSS and Atom feeds of Anadolu Ajansı, TRT Haber, BBC Türkçe, DW Türkçe, Euronews Türkçe, Hürriyet, Sabah, Milliyet, Habertürk, NTV, CNN Türk, Sözcü, Cumhuriyet, Halk TV and Medyascope; headline, short snippet and link only | 5 min each |
 | Directions | [FOSSGIS OSRM](https://routing.openstreetmap.de) (OpenStreetMap data) | On request, cached 5 min, at most 20 a minute |
 
 A few notes on reading the weather and earthquake layers:
@@ -102,6 +127,13 @@ A few notes on reading the weather and earthquake layers:
 - Warnings that have already started are drawn stronger than those still to come; expired ones disappear. A province is coloured by the highest level any of its districts has.
 - The cloud layer is an infrared picture, so it works day and night. On very cold winter nights, frozen ground in the east can show up as thin cloud.
 - Earthquake rings show distance from the epicentre, not shaking or damage. Aftershocks are counted inside the Gardner–Knopoff distance for the magnitude (about 30 km for M4, 53 km for M6).
+
+And on the air, sea and news layers:
+
+- A fire detection is a heat anomaly seen from orbit: usually a fire (in autumn, often stubble burning), but factories and gas flares appear too.
+- Aircraft and ship coverage depends on volunteer receivers, which are thin over parts of Türkiye; AIS coverage is best around İstanbul and patchy in the Aegean.
+- Aircraft whose owners asked for privacy (the FAA's LADD and PIA programmes) are shown without callsign or registration. Military aircraft get no special label.
+- A news pin sits a few kilometres from the province's centre, so pins for one province can be told apart; the place comes from the first province named in the headline, so it is approximate.
 
 Basemaps: [OpenFreeMap](https://openfreemap.org) (© OpenStreetMap contributors), Esri World Imagery, and CesiumJS for 3D.
 

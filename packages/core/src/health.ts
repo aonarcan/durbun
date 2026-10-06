@@ -26,6 +26,8 @@ export interface SourceHealth {
   consecutiveFailures: number;
   lastError?: string;
   nextRunAt?: string;
+  /** Why a source is switched off when it needs something first, e.g. a free API key in .env. */
+  setupHint?: { tr: string; en: string };
 }
 
 export interface HealthInputs {
@@ -38,7 +40,7 @@ export interface HealthInputs {
 
 /**
  * Status rules:
- * - disabled: switched off in config.
+ * - disabled: switched off in config, or waiting for a key it needs.
  * - pending: nothing tried yet.
  * - ok: the last attempt worked.
  * - degraded: recent attempts failed, but data from within 3 intervals is still on the map.

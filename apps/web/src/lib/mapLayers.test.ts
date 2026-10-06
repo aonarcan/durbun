@@ -85,7 +85,7 @@ describe('layer helpers', () => {
     expect(parts.filter((p) => p === 'ring')).toHaveLength(3);
     expect(parts.at(-1)).toBe('main');
     const label = fc.features.find((f) => (f.properties as unknown as { part: string }).part === 'ring-label')!;
-    expect(label.geometry.coordinates[0]).toBeCloseTo(29, 4);
+    expect(label.geometry!.coordinates[0]).toBeCloseTo(29, 4);
     expect(focusFeatures(undefined).features).toHaveLength(0);
   });
 });

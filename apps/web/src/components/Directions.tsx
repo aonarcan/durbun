@@ -1,4 +1,4 @@
-import type { Feature } from '@durbun/core';
+import { pointOf, type Feature } from '@durbun/core';
 import { t, type StringKey } from '../i18n.ts';
 import { distance, travelTime } from '../lib/format.ts';
 import { clearRoute, requestRoute, useRoute, useUi } from '../state.ts';
@@ -13,9 +13,9 @@ const sameSpot = (a?: [number, number], b?: [number, number]) =>
 export function Directions({ feature }: { feature: Feature }) {
   const lang = useUi((s) => s.lang);
   const route = useRoute();
-  if (feature.geometry.type !== 'Point') return null;
-  const [lng, lat] = feature.geometry.coordinates;
-  const to: [number, number] = [lng, lat];
+  const to = pointOf(feature);
+  if (!to) return null;
+  const [lng, lat] = to;
   const active = sameSpot(route.to, to) && route.status !== 'idle';
   const mode = active ? route.mode : undefined;
   const googleMode = (mode ?? 'car') === 'foot' ? 'walking' : 'driving';

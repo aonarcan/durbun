@@ -15,6 +15,9 @@ import { isRasterResult, type LayerDefinition, type SourceDefinition, type Sourc
 interface LayerState {
   info: LayerInfo;
   bySource: Map<string, Feature[]>;
+  /** All sources' features together (merged by id where the layer asks for it). */
+  combined: Feature[];
+  merge?: (a: Feature, b: Feature) => Feature;
   version: number;
   hash: string;
   updatedAt?: Date;
@@ -23,6 +26,8 @@ interface LayerState {
 interface HealthState {
   def: SourceDefinition;
   disabled: boolean;
+  /** Set when the source is off because a setting it needs is missing. */
+  setupHint?: { tr: string; en: string };
   attempted: boolean;
   lastAttemptAt?: Date;
   lastSuccessAt?: Date;
@@ -43,17 +48,49 @@ export class Store extends EventEmitter<{ event: [ServerEvent] }> {
   private readonly health = new Map<string, HealthState>();
   private readonly now: () => number;
 
-  constructor(layers: LayerDefinition[], sources: SourceDefinition[], disabled: Set<string>, now = Date.now) {
+  constructor(
+    layers: LayerDefinition[],
+    sources: SourceDefinition[],
+    disabled: Set<string>,
+    now = Date.now,
+    env: Record<string, string | undefined> = process.env,
+  ) {
     super();
     this.now = now;
-    for (const l of layers) {
+    for (const { merge, ...l } of layers) {
       const sourceIds = sources.filter((s) => s.layer === l.id).map((s) => s.id);
-      this.layers.set(l.id, { info: { ...l, sources: sourceIds }, bySource: new Map(), version: 0, hash: '' });
+      this.layers.set(l.id, {
+        info: { ...l, sources: sourceIds },
+        bySource: new Map(),
+        combined: [],
+        ...(merge ? { merge } : {}),
+        version: 0,
+        hash: '',
+      });
     }
     for (const s of sources) {
       if (!this.layers.has(s.layer)) throw new Error(`Source ${s.id} points at unknown layer ${s.layer}`);
-      this.health.set(s.id, { def: s, disabled: disabled.has(s.id), attempted: false, itemCount: 0, consecutiveFailures: 0 });
+      const needsSetup = s.setup?.env.some((name) => !env[name]);
+      this.health.set(s.id, {
+        def: s,
+        disabled: disabled.has(s.id) || Boolean(needsSetup),
+        ...(needsSetup && s.setup ? { setupHint: s.setup.hint } : {}),
+        attempted: false,
+        itemCount: 0,
+        consecutiveFailures: 0,
+      });
     }
+  }
+
+  private combine(layer: LayerState): Feature[] {
+    const all = [...layer.bySource.values()].flat();
+    if (!layer.merge) return all;
+    const byId = new Map<string, Feature>();
+    for (const f of all) {
+      const seen = byId.get(f.properties.id);
+      byId.set(f.properties.id, seen ? layer.merge(seen, f) : f);
+    }
+    return [...byId.values()];
   }
 
   // ---- layers ----
@@ -62,7 +99,8 @@ export class Store extends EventEmitter<{ event: [ServerEvent] }> {
     const h = this.mustHealth(sourceId);
     const layer = this.layers.get(h.def.layer)!;
     layer.bySource.set(sourceId, features);
-    const all = [...layer.bySource.values()].flat();
+    const all = this.combine(layer);
+    layer.combined = all;
     const hash = createHash('sha1').update(JSON.stringify(all)).digest('hex');
     layer.updatedAt = new Date(this.now());
     if (hash === layer.hash) return;
@@ -100,14 +138,14 @@ export class Store extends EventEmitter<{ event: [ServerEvent] }> {
   getCollection(layerId: string): FeatureCollection | undefined {
     const layer = this.layers.get(layerId);
     if (!layer) return undefined;
-    return { type: 'FeatureCollection', features: [...layer.bySource.values()].flat() };
+    return { type: 'FeatureCollection', features: layer.combined };
   }
 
   layerSummaries(): LayerSummary[] {
     return [...this.layers.values()].map((l) => ({
       ...l.info,
       version: l.version,
-      count: l.info.raster ? l.info.raster.frames.length : [...l.bySource.values()].reduce((n, f) => n + f.length, 0),
+      count: l.info.raster ? l.info.raster.frames.length : l.combined.length,
       ...(l.updatedAt ? { updatedAt: l.updatedAt.toISOString() } : {}),
     }));
   }
@@ -182,6 +220,7 @@ export class Store extends EventEmitter<{ event: [ServerEvent] }> {
       ...(h.newestItemAt ? { newestItemAt: h.newestItemAt } : {}),
       ...(h.lastError ? { lastError: h.lastError } : {}),
       ...(h.nextRunAt ? { nextRunAt: h.nextRunAt.toISOString() } : {}),
+      ...(h.setupHint ? { setupHint: h.setupHint } : {}),
     };
   }
 

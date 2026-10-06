@@ -39,3 +39,31 @@ export function toNumber(value: unknown): number | undefined {
   const n = Number(value.trim().replace(',', '.'));
   return Number.isFinite(n) ? n : undefined;
 }
+
+const UNITS = ['sıfır', 'bir', 'iki', 'üç', 'dört', 'beş', 'altı', 'yedi', 'sekiz', 'dokuz'];
+const TENS = ['', 'on', 'yirmi', 'otuz', 'kırk', 'elli'];
+
+/** The last word of a clock time read aloud in Turkish ("12:40" → "kırk", "09:00" → "dokuz"). */
+function lastSpokenWord(hhmm: string): string {
+  const [h, m] = hhmm.split(':').map(Number) as [number, number];
+  const n = m === 0 ? h : m;
+  if (n % 10 !== 0) return UNITS[n % 10]!;
+  return n === 0 ? 'sıfır' : TENS[n / 10]!;
+}
+
+/**
+ * A clock time with the Turkish locative ("12:40'ta", "10:50'de") or dative
+ * ("23:59'a", "10:50'ye") suffix, which follows how the number is read aloud.
+ */
+export function timeWithSuffix(hhmm: string, kind: 'locative' | 'dative'): string {
+  const word = lastSpokenWord(hhmm);
+  const vowels = word.match(/[aeıioöuü]/g) ?? ['e'];
+  const back = 'aıou'.includes(vowels[vowels.length - 1]!);
+  const last = word[word.length - 1]!;
+  const endsInVowel = 'aeıioöuü'.includes(last);
+  if (kind === 'locative') {
+    const hard = 'fstkçşhp'.includes(last);
+    return `${hhmm}'${hard ? 't' : 'd'}${back ? 'a' : 'e'}`;
+  }
+  return `${hhmm}'${endsInVowel ? 'y' : ''}${back ? 'a' : 'e'}`;
+}
