@@ -1,10 +1,10 @@
 import { pointOf } from '@durbun/core';
 import type { ReactNode } from 'react';
 import { DETAIL_LABELS, KIND_LABELS, t } from '../i18n.ts';
-import { dateTime, timeAgo } from '../lib/format.ts';
-import { featureCentre } from '../lib/mapLayers.ts';
+import { dateTime, distance, timeAgo } from '../lib/format.ts';
+import { featureCentre, trackStats } from '../lib/mapLayers.ts';
 import { useNow } from '../lib/useNow.ts';
-import { useData, useUi } from '../state.ts';
+import { useData, useTracks, useUi } from '../state.ts';
 import { Directions } from './Directions.tsx';
 import type { FlyDetail } from './MapView.tsx';
 import { QuakeDetails } from './QuakeDetails.tsx';
@@ -18,6 +18,7 @@ export function InfoPanel() {
   const feature = useData((s) => (selectedId ? s.byId.get(selectedId) : undefined));
   const source = useData((s) => s.sources.find((x) => x.id === feature?.properties.source));
   const group = useData((s) => s.layers.find((l) => l.id === feature?.properties.layer)?.group);
+  const track = useTracks((s) => (s.selected && s.selected.id === selectedId ? s.selected.points : undefined));
   const now = useNow(30_000);
 
   if (!feature) return null;
@@ -51,6 +52,11 @@ export function InfoPanel() {
               {k === 'phone' ? <a href={`tel:${String(v).replace(/\s/g, '')}`}>{String(v)}</a> : String(v)}
             </Row>
           ))}
+        {track && track.length > 1 && (
+          <Row label={t(lang, 'knownPath')}>
+            {pathSummary(track, lang)}
+          </Row>
+        )}
         {coords && (
           <Row label={t(lang, 'coordinates')}>
             {coords[1].toFixed(5)}, {coords[0].toFixed(5)}
@@ -86,6 +92,17 @@ export function InfoPanel() {
       {group === 'places' && <Directions feature={feature} />}
     </aside>
   );
+}
+
+/** "1 sa 12 dk · 312 km" for a path. */
+function pathSummary(points: Parameters<typeof trackStats>[0], lang: 'tr' | 'en'): string {
+  const { km, ms } = trackStats(points);
+  const minutes = Math.max(1, Math.round(ms / 60_000));
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  const [hu, mu] = lang === 'tr' ? ['sa', 'dk'] : ['h', 'min'];
+  const time = h ? `${h} ${hu}${m ? ` ${m} ${mu}` : ''}` : `${m} ${mu}`;
+  return `${time} · ${distance(km * 1000, lang)}`;
 }
 
 function Row({ label, children }: { label: string; children: ReactNode }) {

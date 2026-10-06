@@ -22,6 +22,8 @@ export function LayerPanel() {
     setPage,
     panelTab,
     setPanelTab,
+    trails,
+    setTrails,
   } = useUi();
   const newsCount = useData((s) => s.collections.news?.features.length ?? 0);
   const filters = useFilters();
@@ -156,6 +158,16 @@ export function LayerPanel() {
                       </div>
                     )}
                     {l.shape === 'areas' && isVisible(l, visible) && <WarningLegend lang={lang} />}
+                    {l.tracks && isVisible(l, visible) && (
+                      <label className="check sub-option">
+                        <input
+                          type="checkbox"
+                          checked={trails[l.id] !== false}
+                          onChange={(e) => setTrails(l.id, e.target.checked)}
+                        />{' '}
+                        {t(lang, 'showTrails')}
+                      </label>
+                    )}
                   </li>
                 ))}
               </ul>

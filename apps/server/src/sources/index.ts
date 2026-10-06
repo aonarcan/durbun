@@ -91,6 +91,7 @@ export const layers: LayerDefinition[] = [
     defaultOn: false,
     attribution: 'adsb.fi, adsb.lol, OpenSky',
     merge: mergeAircraft,
+    tracks: { keepMinutes: 120, tailMinutes: 4 },
   },
   {
     id: 'ships',
@@ -99,6 +100,7 @@ export const layers: LayerDefinition[] = [
     color: '#0f766e',
     defaultOn: false,
     attribution: 'AISStream',
+    tracks: { keepMinutes: 720, tailMinutes: 45 },
   },
   {
     id: 'straits',
