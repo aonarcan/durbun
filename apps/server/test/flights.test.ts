@@ -50,6 +50,8 @@ function fakeHttp(opts: { delayMs?: number; fail?: RegExp } = {}): HttpClient & 
     getBuffer: async () => Buffer.alloc(0),
     getJson: answer,
     postJson: answer,
+    postText: async () => '',
+    getResponse: async () => new Response(''),
   };
 }
 

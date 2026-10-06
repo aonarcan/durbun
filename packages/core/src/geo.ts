@@ -16,6 +16,11 @@ export interface LineStringGeometry {
   coordinates: Position[];
 }
 
+export interface MultiLineStringGeometry {
+  type: 'MultiLineString';
+  coordinates: Position[][];
+}
+
 export interface PolygonGeometry {
   type: 'Polygon';
   coordinates: Position[][];
@@ -26,7 +31,7 @@ export interface MultiPolygonGeometry {
   coordinates: Position[][][];
 }
 
-export type Geometry = PointGeometry | LineStringGeometry | PolygonGeometry | MultiPolygonGeometry;
+export type Geometry = PointGeometry | LineStringGeometry | MultiLineStringGeometry | PolygonGeometry | MultiPolygonGeometry;
 
 /** Properties every Dürbün feature carries, whatever its source. */
 export interface FeatureProps {

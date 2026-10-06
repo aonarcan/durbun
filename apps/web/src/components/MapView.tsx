@@ -23,8 +23,10 @@ import {
   syncRoute,
   syncTrack,
   syncTrails,
+  syncTransit,
   tailsReachingNow,
   trackFeatures,
+  transitFeatures,
   type RouteDrawing,
 } from '../lib/mapLayers.ts';
 import { pointOf, type Feature, type FeatureCollection, type LayerSummary } from '@durbun/core';
@@ -40,6 +42,7 @@ import {
   useRaster,
   useRoute,
   useTracks,
+  useTransit,
   useUi,
   type ViewMode,
 } from '../state.ts';
@@ -56,6 +59,26 @@ function featuresNow(layer: LayerSummary, fc: FeatureCollection | undefined, fil
 }
 
 const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] };
+
+/** A layer's data only changes with its collection or the filters (aircraft move every second, so always). */
+function layerKey(layer: LayerSummary): readonly unknown[] | undefined {
+  if (layer.id === 'aircraft') return undefined;
+  const { windows, minValues } = useUi.getState();
+  return [useData.getState().collections[layer.id], windows, minValues];
+}
+
+/** The selected bus's line (or one picked at a stop), with rings where its buses are now. */
+function drawTransit(map: MapLibreMap): void {
+  const { line, direction } = useTransit.getState();
+  const buses = useData.getState().byId;
+  syncTransit(
+    map,
+    transitFeatures(line, direction, (id) => {
+      const f = buses.get(id);
+      return f ? pointOf(f) : undefined;
+    }),
+  );
+}
 
 /** Trails behind aircraft and ships, and the selected one's full path. */
 function drawPaths(map: MapLibreMap): void {
@@ -143,6 +166,7 @@ export function MapView({ view }: { view: View2D }) {
         data.layers,
         (l) => featuresNow(l, data.collections[l.id], filters),
         (l) => isVisible(l, ui.visible),
+        layerKey,
       );
       syncRasters(
         map,
@@ -151,6 +175,7 @@ export function MapView({ view }: { view: View2D }) {
         (l) => frameIndex(l, useRaster.getState().frame),
       );
       drawPaths(map);
+      drawTransit(map);
       syncRoute(map, currentRoute());
       syncFocus(map, useFocus.getState().focus);
       localiseLabels(map, ui.lang);
@@ -172,12 +197,16 @@ export function MapView({ view }: { view: View2D }) {
     });
 
     const clickable = () =>
-      useData
-        .getState()
-        .layers.flatMap((l) => styleLayerIds(l))
-        .filter((id) => map.getLayer(id));
+      [...useData.getState().layers.flatMap((l) => styleLayerIds(l)), 'durbun-transit-stop', 'durbun-transit-vehicle'].filter((id) =>
+        map.getLayer(id),
+      );
+    // A few pixels of slack, so small markers (buses seen from afar) can be clicked.
+    const around = (p: { x: number; y: number }): [[number, number], [number, number]] => [
+      [p.x - 6, p.y - 6],
+      [p.x + 6, p.y + 6],
+    ];
     map.on('click', (e) => {
-      const hits = map.queryRenderedFeatures(e.point, { layers: clickable() });
+      const hits = map.queryRenderedFeatures(around(e.point), { layers: clickable() });
       // Markers beat areas; among overlapping markers (an earthquake and its aftershocks) the one
       // whose centre is nearest the click wins, then the larger one.
       let best: (typeof hits)[number] | undefined;
@@ -205,7 +234,7 @@ export function MapView({ view }: { view: View2D }) {
     });
     map.on('mousemove', (e) => {
       const ids = clickable();
-      const over = ids.length > 0 && map.queryRenderedFeatures(e.point, { layers: ids }).length > 0;
+      const over = ids.length > 0 && map.queryRenderedFeatures(around(e.point), { layers: ids }).length > 0;
       map.getCanvas().style.cursor = over ? 'pointer' : '';
     });
 
@@ -233,9 +262,21 @@ export function MapView({ view }: { view: View2D }) {
       layers,
       (l) => featuresNow(l, collections[l.id], filters),
       (l) => isVisible(l, visible),
+      layerKey,
     );
     drawPaths(map);
+    drawTransit(map);
   }, [layers, collections, visible, filters, trails]);
+
+  // A bus line shown or hidden.
+  useEffect(
+    () =>
+      useTransit.subscribe((s, prev) => {
+        const map = mapRef.current;
+        if (map && styleReady.current && (s.line !== prev.line || s.direction !== prev.direction)) drawTransit(map);
+      }),
+    [],
+  );
 
   // New trails or a newly selected path.
   useEffect(

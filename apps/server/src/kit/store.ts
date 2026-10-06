@@ -38,7 +38,12 @@ interface HealthState {
   consecutiveFailures: number;
   lastError?: string;
   nextRunAt?: Date;
+  /** On-demand source skipping its runs because nobody has the layer on. */
+  idle: boolean;
 }
+
+/** How long a layer counts as watched after a browser last asked for it. */
+export const WANTED_MS = 3 * 60_000;
 
 /**
  * Latest state of every layer and source, kept in memory. Emits a ServerEvent
@@ -49,6 +54,8 @@ export class Store extends EventEmitter<{ event: [ServerEvent] }> {
   private readonly health = new Map<string, HealthState>();
   private readonly now: () => number;
   private readonly tracks: TrackStore;
+  /** Layer id → when a browser last asked for it. */
+  private readonly wantedAt = new Map<string, number>();
 
   constructor(
     layers: LayerDefinition[],
@@ -83,6 +90,7 @@ export class Store extends EventEmitter<{ event: [ServerEvent] }> {
         attempted: false,
         itemCount: 0,
         consecutiveFailures: 0,
+        idle: false,
       });
     }
   }
@@ -168,6 +176,29 @@ export class Store extends EventEmitter<{ event: [ServerEvent] }> {
     }));
   }
 
+  // ---- who is watching ----
+
+  /** A browser shows this layer. Returns true if it had been unwatched (so on-demand sources can wake up). */
+  want(layerId: string): boolean {
+    if (!this.layers.has(layerId)) return false;
+    const was = this.wanted(layerId);
+    this.wantedAt.set(layerId, this.now());
+    return !was;
+  }
+
+  wanted(layerId: string): boolean {
+    const at = this.wantedAt.get(layerId);
+    return at !== undefined && this.now() - at < WANTED_MS;
+  }
+
+  /** Marks an on-demand source as resting (or active again). */
+  setIdle(sourceId: string, idle: boolean): void {
+    const h = this.mustHealth(sourceId);
+    if (h.idle === idle) return;
+    h.idle = idle;
+    this.emitHealth(sourceId);
+  }
+
   // ---- health ----
 
   isDisabled(sourceId: string): boolean {
@@ -226,6 +257,7 @@ export class Store extends EventEmitter<{ event: [ServerEvent] }> {
           consecutiveFailures: h.consecutiveFailures,
           intervalSec: d.intervalSec,
           disabled: h.disabled,
+          idle: h.idle,
           ...(h.lastSuccessAt ? { lastSuccessAt: h.lastSuccessAt.getTime() } : {}),
         },
         this.now(),

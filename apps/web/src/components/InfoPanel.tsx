@@ -4,18 +4,22 @@ import { DETAIL_LABELS, KIND_LABELS, t } from '../i18n.ts';
 import { clockTime, dateTime, distance, timeAgo } from '../lib/format.ts';
 import { featureCentre, trackBounds, trackStats } from '../lib/mapLayers.ts';
 import { useNow } from '../lib/useNow.ts';
-import { useData, useTracks, useUi } from '../state.ts';
+import { useData, useTracks, useTransit, useUi } from '../state.ts';
 import { Directions } from './Directions.tsx';
 import type { FlyDetail } from './MapView.tsx';
 import { QuakeDetails } from './QuakeDetails.tsx';
 import { StraitsCard } from './StraitsCard.tsx';
+import { TransitDetails } from './TransitDetails.tsx';
 
 /** Details of the clicked feature. */
 export function InfoPanel() {
   const selectedId = useUi((s) => s.selectedId);
   const select = useUi((s) => s.select);
   const lang = useUi((s) => s.lang);
-  const feature = useData((s) => (selectedId ? s.byId.get(selectedId) : undefined));
+  const mapped = useData((s) => (selectedId ? s.byId.get(selectedId) : undefined));
+  // A bus or stop picked on a line drawn on the map, while its own layer is off.
+  const fromTransit = useTransit((s) => (s.answer && s.answer.id === selectedId ? s.answer.data.feature : undefined));
+  const feature = mapped ?? fromTransit;
   const source = useData((s) => s.sources.find((x) => x.id === feature?.properties.source));
   const group = useData((s) => s.layers.find((l) => l.id === feature?.properties.layer)?.group);
   const path = useTracks((s) => (s.selected && s.selected.id === selectedId ? s.selected : undefined));
@@ -122,6 +126,7 @@ export function InfoPanel() {
       </div>
       {p.layer === 'earthquakes' && <QuakeDetails feature={feature} />}
       {p.layer === 'straits' && <StraitsCard feature={feature} />}
+      {(p.layer === 'buses' || p.layer === 'bus-stops') && <TransitDetails id={p.id} />}
       {group === 'places' && <Directions feature={feature} />}
     </aside>
   );

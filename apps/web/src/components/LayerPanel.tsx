@@ -24,6 +24,7 @@ export function LayerPanel() {
     setPanelTab,
     trails,
     setTrails,
+    camera,
   } = useUi();
   const newsCount = useData((s) => s.collections.news?.features.length ?? 0);
   const filters = useFilters();
@@ -56,7 +57,10 @@ export function LayerPanel() {
       const items = shownFeatures(l, collections[l.id], filters, now);
       return `${items.length} ${t(lang, 'stories')} · ${items.filter((f) => f.geometry).length} ${t(lang, 'onMap')} · ${timeAgo(l.updatedAt, lang, now)}`;
     }
-    return `${shownFeatures(l, collections[l.id], filters, now).length} ${t(lang, 'items')} · ${timeAgo(l.updatedAt, lang, now)}`;
+    // Lazy layers (every bus, every stop) aren't loaded while off: show the server's count.
+    const count = collections[l.id] ? shownFeatures(l, collections[l.id], filters, now).length : l.count;
+    const zoomHint = l.minZoom && isVisible(l, visible) && camera.zoom < l.minZoom ? ` · ${t(lang, 'zoomToSee')}` : '';
+    return `${count.toLocaleString(lang === 'tr' ? 'tr-TR' : 'en-GB')} ${t(lang, 'items')} · ${timeAgo(l.updatedAt, lang, now)}${zoomHint}`;
   };
 
   return (

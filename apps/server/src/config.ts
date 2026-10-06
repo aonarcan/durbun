@@ -27,4 +27,6 @@ export const config = {
       .filter(Boolean),
   ),
   webDist: resolve(repoRoot, 'apps/web/dist'),
+  /** Large downloads processed once and kept between runs (bus routes, timetable extracts). */
+  cacheDir: resolve(repoRoot, 'cache'),
 };

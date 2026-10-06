@@ -110,6 +110,44 @@ export function shipCanvas(color: string, moving: boolean): HTMLCanvasElement {
   return c;
 }
 
+/** İstanbul buses: one colour; a pointed nose when the direction is known, paler when stopped. */
+export const BUS_COLOR = '#c2255c';
+
+/**
+ * A bus seen from above: a rounded rectangle, with an arrow tip at the front
+ * when its heading is known (drawn pointing up; the map rotates it).
+ */
+export function busCanvas(color: string, moving: boolean, pointed: boolean): HTMLCanvasElement {
+  const [c, ctx] = canvas();
+  ctx.translate(ICON_PX / 2, ICON_PX / 2);
+  ctx.beginPath();
+  if (pointed) {
+    ctx.moveTo(0, -17);
+    ctx.lineTo(8, -8);
+  } else {
+    ctx.moveTo(-5, -12);
+    ctx.quadraticCurveTo(8, -12, 8, -8);
+  }
+  ctx.lineTo(8, 12);
+  ctx.quadraticCurveTo(8, 15, 5, 15);
+  ctx.lineTo(-5, 15);
+  ctx.quadraticCurveTo(-8, 15, -8, 12);
+  ctx.lineTo(-8, -8);
+  if (pointed) ctx.lineTo(0, -17);
+  else ctx.quadraticCurveTo(-8, -12, -5, -12);
+  ctx.closePath();
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#ffffff';
+  ctx.stroke();
+  ctx.fillStyle = moving ? color : mixWithWhite(color, 0.5);
+  ctx.fill();
+  // windscreen
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+  ctx.fillRect(-5, pointed ? -6 : -9, 10, 4);
+  return c;
+}
+
 function mixWithWhite(hex: string, k: number): string {
   const rgb = [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16));
   return `rgb(${rgb.map((v) => Math.round(v + (255 - v) * k)).join(', ')})`;
@@ -127,6 +165,10 @@ export function mapImages(): Record<string, HTMLCanvasElement> {
     images[`durbun-ship-${cat}`] = shipCanvas(color, true);
     images[`durbun-ship-still-${cat}`] = shipCanvas(color, false);
   }
+  images['durbun-bus'] = busCanvas(BUS_COLOR, true, true);
+  images['durbun-bus-nodir'] = busCanvas(BUS_COLOR, true, false);
+  images['durbun-bus-still'] = busCanvas(BUS_COLOR, false, false);
+  images['durbun-bus-still-dir'] = busCanvas(BUS_COLOR, false, true);
   return images;
 }
 

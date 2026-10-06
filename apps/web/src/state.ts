@@ -1,7 +1,10 @@
 import type {
+  BusAnswer,
   Feature,
   FeatureCollection,
   LayerSummary,
+  StopAnswer,
+  TransitLine,
   RouteResult,
   ServerEvent,
   SourceHealth,
@@ -208,6 +211,12 @@ function indexFeatures(collections: Record<string, FeatureCollection>): Map<stri
   return map;
 }
 
+/** Lazy layers (every bus, every stop) are loaded only while switched on. */
+function wanted(id: string): boolean {
+  const layer = useData.getState().layers.find((l) => l.id === id);
+  return !layer?.lazy || isVisible(layer, useUi.getState().visible);
+}
+
 async function loadLayer(id: string): Promise<void> {
   const fc = await getJson<FeatureCollection>(`/api/layers/${encodeURIComponent(id)}`);
   const collections = { ...useData.getState().collections, [id]: fc };
@@ -268,8 +277,24 @@ async function loadAll(): Promise<void> {
     getJson<SourceHealth[]>('/api/sources'),
   ]);
   useData.setState({ layers, sources });
-  await Promise.all(layers.map((l) => loadLayer(l.id)));
+  await Promise.all(layers.filter((l) => wanted(l.id)).map((l) => loadLayer(l.id)));
 }
+
+// A lazy layer switched on is loaded at once; the server is reminded every minute that
+// someone still shows it, so sources that run only on demand (buses) keep running.
+useUi.subscribe((s, prev) => {
+  if (s.visible === prev.visible) return;
+  for (const l of useData.getState().layers) {
+    if (l.lazy && isVisible(l, s.visible) && !isVisible(l, prev.visible)) void loadLayer(l.id).catch(() => {});
+  }
+});
+setInterval(() => {
+  const ids = useData
+    .getState()
+    .layers.filter((l) => l.lazy && isVisible(l, useUi.getState().visible))
+    .map((l) => l.id);
+  if (ids.length) void fetch(`/api/want?layers=${ids.map(encodeURIComponent).join(',')}`).catch(() => {});
+}, 60_000);
 
 function applyEvent(e: ServerEvent): void {
   if (e.type === 'layer') {
@@ -280,7 +305,7 @@ function applyEvent(e: ServerEvent): void {
           : l,
       ),
     }));
-    void loadLayer(e.layer).catch(() => {});
+    if (wanted(e.layer)) void loadLayer(e.layer).catch(() => {});
   } else {
     useData.setState((s) => {
       const exists = s.sources.some((x) => x.id === e.source.id);
@@ -312,6 +337,80 @@ export function startLive(): () => void {
   };
   return () => events.close();
 }
+
+// ---- İstanbul buses, stops and lines ----
+
+export type TransitAnswer =
+  | { kind: 'bus'; id: string; data: BusAnswer }
+  | { kind: 'stop'; id: string; data: StopAnswer };
+
+interface TransitState {
+  /** What the server said about the selected bus or stop. */
+  answer?: TransitAnswer;
+  status: 'idle' | 'loading' | 'ready' | 'error';
+  /** The line drawn on the map: the selected bus's, or one picked at a stop. */
+  line?: TransitLine;
+  /** The selected bus's direction on that line, drawn stronger. */
+  direction?: 'G' | 'D';
+  showLine(code: string | undefined): Promise<void>;
+}
+
+export const useTransit = create<TransitState>((set) => ({
+  status: 'idle',
+  async showLine(code) {
+    if (!code) {
+      set({ line: undefined, direction: undefined });
+      return;
+    }
+    try {
+      set({ line: await getJson<TransitLine>(`/api/transit/line/${encodeURIComponent(code)}`), direction: undefined });
+    } catch {
+      // Leave the map as it is.
+    }
+  },
+}));
+
+let transitRequest = 0;
+
+/** Looks up the selected bus (its line) or stop (its lines and coming buses). */
+async function loadTransit(id: string | undefined, refresh = false): Promise<void> {
+  const req = ++transitRequest;
+  const m = id && /^(bus|stop):(.+)$/.exec(id);
+  if (!m) {
+    if (useTransit.getState().answer || useTransit.getState().line) useTransit.setState({ answer: undefined, line: undefined, status: 'idle' });
+    return;
+  }
+  const kind = m[1] as 'bus' | 'stop';
+  if (!refresh) useTransit.setState({ answer: undefined, status: 'loading', ...(kind === 'bus' ? { line: undefined } : {}) });
+  try {
+    const data = await getJson<BusAnswer | StopAnswer>(`/api/transit/${kind}/${encodeURIComponent(m[2]!)}`);
+    if (req !== transitRequest) return;
+    if (kind === 'bus') {
+      const bus = data as BusAnswer;
+      useTransit.setState({
+        answer: { kind, id, data: bus },
+        status: 'ready',
+        line: bus.line,
+        direction: bus.direction,
+      });
+    } else {
+      useTransit.setState({ answer: { kind, id, data: data as StopAnswer }, status: 'ready' });
+    }
+  } catch {
+    if (req === transitRequest && !refresh) useTransit.setState({ status: 'error' });
+  }
+}
+
+useUi.subscribe((s, prev) => {
+  if (s.selectedId !== prev.selectedId) void loadTransit(s.selectedId);
+});
+// Buses move and stops get new arrivals: refresh what's selected every 20 seconds.
+setInterval(() => {
+  const id = useUi.getState().selectedId;
+  if (id && /^(bus|stop):/.test(id) && document.visibilityState === 'visible') void loadTransit(id, true);
+  const line = useTransit.getState().line;
+  if (line && !id?.startsWith('bus:') && document.visibilityState === 'visible') void useTransit.getState().showLine(line.code);
+}, 20_000);
 
 // ---- directions ----
 

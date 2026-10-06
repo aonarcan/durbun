@@ -3,7 +3,7 @@
  * here; a source only counts as done when it shows up on that page.
  */
 
-export type SourceStatus = 'pending' | 'ok' | 'degraded' | 'failing' | 'disabled';
+export type SourceStatus = 'pending' | 'ok' | 'degraded' | 'failing' | 'disabled' | 'idle';
 
 export interface SourceHealth {
   id: string;
@@ -35,12 +35,15 @@ export interface HealthInputs {
   consecutiveFailures: number;
   intervalSec: number;
   disabled?: boolean;
+  /** Fetched only while someone has its layer on, and nobody does now. */
+  idle?: boolean;
   attempted: boolean;
 }
 
 /**
  * Status rules:
  * - disabled: switched off in config, or waiting for a key it needs.
+ * - idle: fetched only while someone has its layer on, and nobody does.
  * - pending: nothing tried yet.
  * - ok: the last attempt worked.
  * - degraded: recent attempts failed, but data from within 3 intervals is still on the map.
@@ -48,6 +51,7 @@ export interface HealthInputs {
  */
 export function computeStatus(h: HealthInputs, now: number): SourceStatus {
   if (h.disabled) return 'disabled';
+  if (h.idle) return 'idle';
   if (!h.attempted) return 'pending';
   if (h.consecutiveFailures === 0) return h.lastSuccessAt === undefined ? 'pending' : 'ok';
   if (h.lastSuccessAt !== undefined && now - h.lastSuccessAt <= 3 * h.intervalSec * 1000) return 'degraded';

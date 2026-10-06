@@ -24,6 +24,10 @@ export interface HttpClient {
   getJson<T = unknown>(url: string, opts?: RequestOptions): Promise<T>;
   /** POSTs a JSON body and reads a JSON answer. */
   postJson<T = unknown>(url: string, body: unknown, opts?: RequestOptions): Promise<T>;
+  /** POSTs a text body (e.g. a SOAP envelope; set its Content-Type in the headers) and reads the answer as text. */
+  postText(url: string, body: string, opts?: RequestOptions): Promise<string>;
+  /** The raw response, for downloads too large to hold in memory at once. */
+  getResponse(url: string, opts?: RequestOptions): Promise<Response>;
 }
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
@@ -36,7 +40,7 @@ export function createHttpClient(userAgent: string, fetchImpl: FetchLike = fetch
         headers: {
           'User-Agent': userAgent,
           Accept: 'application/json, text/plain, */*',
-          ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+          ...(body !== undefined ? { 'Content-Type': 'application/json; charset=utf-8' } : {}),
           ...opts.headers,
         },
         ...(body !== undefined ? { method: 'POST', body } : {}),
@@ -77,7 +81,11 @@ export function createHttpClient(userAgent: string, fetchImpl: FetchLike = fetch
     return parseJson<T>(await (await request(url, opts, JSON.stringify(payload))).text());
   }
 
-  return { getText, getJson, getBuffer, postJson };
+  async function postText(url: string, payload: string, opts: RequestOptions = {}): Promise<string> {
+    return (await request(url, opts, payload)).text();
+  }
+
+  return { getText, getJson, getBuffer, postJson, postText, getResponse: (url, opts = {}) => request(url, opts) };
 }
 
 function snippet(text: string): string {

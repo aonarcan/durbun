@@ -5,7 +5,7 @@ Dürbün's design follows two open-source projects, both under the MIT licence:
 - **Osiris** by simplifaisoul, <https://github.com/simplifaisoul/osiris>: the 2D dashboard approach, layer catalogue and camera aggregation.
 - **God's Eye View** by Bilawal Sidhu, <https://github.com/bilawalsidhu/gods-eye-view>: the CesiumJS 3D globe, provider modules and live transport ingest.
 
-Stages 1 and 2 contain no code copied from either project. When later stages adapt code from them, the files carry a note naming the original, and that project's MIT licence text is added here.
+Stages 1 to 3 contain no code copied from either project. When later stages adapt code from them, the files carry a note naming the original, and that project's MIT licence text is added here.
 
 Third-party data keeps its own terms:
 
@@ -20,5 +20,6 @@ Third-party data keeps its own terms:
 - Fire detections: NASA FIRMS (LANCE), VIIRS and MODIS active fire products.
 - Aircraft positions: adsb.fi, adsb.lol (ODbL) and The OpenSky Network. Flight histories: adsb.lol traces (ODbL) and OpenSky tracks. Flight routes: adsb.im route database.
 - Ship positions: AISStream.io.
+- İstanbul buses, stops, lines, routes and timetables: İETT, rail lines and stations, Metro İstanbul lines, stations and notices, and the pier list: İstanbul Büyükşehir Belediyesi, under the İBB Open Data Licence (data.ibb.gov.tr).
 - Straits traffic hours: T.C. Kıyı Emniyeti Genel Müdürlüğü.
 - News headlines and snippets belong to their outlets; Dürbün shows the headline, a short snippet and a link to the original.
