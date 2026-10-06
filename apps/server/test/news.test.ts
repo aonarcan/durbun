@@ -89,10 +89,13 @@ describe('news features', () => {
       { title: 'Eski haber', link: 'https://example.org/a', publishedAt: '2026-10-03T08:00:00.000Z' },
       { title: 'Yeni haber', link: 'https://example.org/b', publishedAt: '2026-10-06T07:00:00.000Z' },
       { title: 'Yeni haber (tekrar)', link: 'https://example.org/b', publishedAt: '2026-10-06T07:00:00.000Z' },
-      { title: 'Gelecekten', link: 'https://example.org/c', publishedAt: '2026-10-06T09:00:00.000Z' },
+      { title: 'Biraz ileride', link: 'https://example.org/c', publishedAt: '2026-10-06T08:05:00.000Z' },
+      { title: 'GMT diye İstanbul saati', link: 'https://example.org/d', publishedAt: '2026-10-06T10:55:00.000Z' },
     ];
     const features = newsFeatures(items, outlet, now);
-    expect(features.map((f) => f.properties.title)).toEqual(['Yeni haber', 'Gelecekten']);
+    expect(features.map((f) => f.properties.title)).toEqual(['Yeni haber', 'Biraz ileride', 'GMT diye İstanbul saati']);
+    // Slightly ahead: shown as now. Nearly three hours ahead: a mislabelled local time.
     expect(features[1]!.properties.observedAt).toBe(now.toISOString());
+    expect(features[2]!.properties.observedAt).toBe('2026-10-06T07:55:00.000Z');
   });
 });

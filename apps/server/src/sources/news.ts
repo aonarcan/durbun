@@ -180,7 +180,11 @@ export function newsFeatures(items: FeedItem[], outlet: { id: string; name: stri
   const seen = new Set<string>();
   const out: Feature[] = [];
   for (const item of items) {
-    const t = item.publishedAt ? Date.parse(item.publishedAt) : NaN;
+    let t = item.publishedAt ? Date.parse(item.publishedAt) : NaN;
+    // Some feeds (CNN Türk) write İstanbul time but label it GMT, which puts
+    // stories up to three hours in the future; take those three hours back off.
+    const ahead = t - now.getTime();
+    if (ahead > 10 * 60_000 && ahead <= 3 * 3600_000 + 10 * 60_000) t -= 3 * 3600_000;
     if (Number.isFinite(t) && now.getTime() - t > MAX_AGE_MS) continue;
     if (seen.has(item.link)) continue;
     seen.add(item.link);
