@@ -3,6 +3,8 @@ import type { SourceDefinition } from './source.ts';
 import type { Store } from './store.ts';
 
 const DEFAULT_TIMEOUT_SEC = 30;
+/** How often a resting on-demand source checks whether someone wants it again. */
+const IDLE_CHECK_SEC = 10;
 const MAX_BACKOFF_SEC = 30 * 60;
 
 export interface SchedulerOptions {
@@ -88,10 +90,25 @@ export class Scheduler {
     }
   }
 
+  /** Someone switched a layer on: run its resting on-demand sources now rather than at the next check. */
+  wake(layerId: string): void {
+    for (const s of this.sources) {
+      if (s.layer !== layerId || !s.onDemand || this.store.isDisabled(s.id) || this.running.has(s.id)) continue;
+      clearTimeout(this.timers.get(s.id));
+      this.schedule(s, 0);
+    }
+  }
+
   private schedule(source: SourceDefinition, delaySec: number): void {
     if (this.stopped) return;
     this.store.setNextRun(source.id, new Date(Date.now() + delaySec * 1000));
     const timer = setTimeout(async () => {
+      if (source.onDemand && !this.store.wanted(source.layer)) {
+        this.store.setIdle(source.id, true);
+        this.schedule(source, IDLE_CHECK_SEC);
+        return;
+      }
+      if (source.onDemand) this.store.setIdle(source.id, false);
       await this.runOnce(source);
       const failures = this.store.sourceHealth(source.id).consecutiveFailures;
       this.schedule(source, nextDelaySec(source.intervalSec, failures, this.random));

@@ -4,3 +4,4 @@ export * from './health.ts';
 export * from './events.ts';
 export * from './route.ts';
 export * from './tracks.ts';
+export * from './transit.ts';

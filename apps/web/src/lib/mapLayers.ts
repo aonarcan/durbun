@@ -1,4 +1,4 @@
-import type { Feature, FeatureCollection, FlightRoute, LayerSummary, TrackPoint } from '@durbun/core';
+import type { Feature, FeatureCollection, FlightRoute, LayerSummary, Position, TrackPoint, TransitLine } from '@durbun/core';
 import type {
   ExpressionSpecification,
   GeoJSONSource,
@@ -8,7 +8,7 @@ import type {
 } from 'maplibre-gl';
 import type { QuakeFocus } from './quake.ts';
 import { FONT_BOLD } from './basemaps.ts';
-import { imageData, mapImages, PLANE_COLORS, planeBand, SHIP_COLORS } from './icons.ts';
+import { BUS_COLOR, imageData, mapImages, PLANE_COLORS, planeBand, SHIP_COLORS } from './icons.ts';
 
 /** Colours for İBB notice kinds; shared by the 2D and 3D views. */
 export const KIND_COLORS: Record<string, string> = {
@@ -81,6 +81,8 @@ export function styleLayerIds(layer: Pick<LayerSummary, 'id' | 'shape' | 'raster
   const s = sourceId(layer.id);
   if (layer.raster) return [];
   if (layer.shape === 'areas') return [`${s}-fill`, `${s}-line`];
+  if (layer.shape === 'network') return [`${s}-line`, `${s}-building`, `${s}-circle`, `${s}-label`];
+  if (layer.id === 'buses') return [`${s}-circle`, `${s}-icon`];
   if (layer.id === 'weather-now') return [`${s}-circle`, `${s}-label`, `${s}-arrow`];
   if (layer.id === 'aircraft' || layer.id === 'ships') return [`${s}-icon`, `${s}-label`];
   if (layer.listed) return [`${s}-cluster`, `${s}-count`, `${s}-circle`];
@@ -135,6 +137,15 @@ const tempExpression = [
 ] as unknown as ExpressionSpecification;
 
 function specsFor(layer: LayerSummary): LayerSpecification[] {
+  const specs = baseSpecs(layer);
+  if (!layer.minZoom) return specs;
+  // Dense layers (every bus stop) start at a zoom level; layers that start later keep their own.
+  return specs.map((spec) => ({ ...spec, minzoom: Math.max(layer.minZoom!, (spec as { minzoom?: number }).minzoom ?? 0) }) as LayerSpecification);
+}
+
+const isStation = ['in', 'station', ['get', 'kind']] as unknown as ExpressionSpecification;
+
+function baseSpecs(layer: LayerSummary): LayerSpecification[] {
   const ids = styleLayerIds(layer);
   const source = sourceId(layer.id);
 
@@ -153,6 +164,138 @@ function specsFor(layer: LayerSummary): LayerSpecification[] {
         type: 'line',
         source,
         paint: { 'line-color': color, 'line-width': ['case', ['==', ['get', 'active'], 1], 2, 1], 'line-opacity': 0.9 },
+      },
+    ];
+  }
+
+  if (layer.shape === 'network') {
+    return [
+      {
+        id: ids[0]!,
+        type: 'line',
+        source,
+        filter: ['all', ['!', isStation], ['!=', ['get', 's_building'], 1]] as unknown as ExpressionSpecification,
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: {
+          'line-color': ['get', 's_color'] as unknown as ExpressionSpecification,
+          'line-width': ['interpolate', ['linear'], ['zoom'], 9, 2, 13, 4, 16, 6] as unknown as ExpressionSpecification,
+          'line-opacity': 0.9,
+        },
+      },
+      {
+        id: ids[1]!,
+        type: 'line',
+        source,
+        filter: ['all', ['!', isStation], ['==', ['get', 's_building'], 1]] as unknown as ExpressionSpecification,
+        paint: {
+          'line-color': ['get', 's_color'] as unknown as ExpressionSpecification,
+          'line-width': 2,
+          'line-opacity': 0.55,
+          'line-dasharray': [2, 2],
+        },
+      },
+      {
+        id: ids[2]!,
+        type: 'circle',
+        source,
+        filter: isStation,
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 2, 12, 3.5, 15, 6] as unknown as ExpressionSpecification,
+          // A station on a disrupted line is yellow inside.
+          'circle-color': ['case', ['==', ['get', 'kind'], 'station-disrupted'], '#ffd43b', '#ffffff'] as unknown as ExpressionSpecification,
+          'circle-stroke-color': ['get', 's_color'] as unknown as ExpressionSpecification,
+          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 9, 1.2, 13, 2.5] as unknown as ExpressionSpecification,
+        },
+      },
+      {
+        id: ids[3]!,
+        type: 'symbol',
+        source,
+        filter: isStation,
+        minzoom: 13,
+        layout: {
+          'text-field': ['get', 'title'],
+          'text-font': FONT_BOLD,
+          'text-size': 11,
+          'text-anchor': 'top',
+          'text-offset': [0, 0.8],
+          'text-optional': true,
+        },
+        paint: { 'text-color': '#1f2937', 'text-halo-color': '#ffffff', 'text-halo-width': 1.6 },
+      },
+    ];
+  }
+
+  if (layer.id === 'buses') {
+    const moving = ['==', ['get', 's_moving'], 1];
+    const pointed = ['has', 's_track'];
+    return [
+      {
+        id: ids[0]!,
+        type: 'circle',
+        source,
+        maxzoom: 13,
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 1.5, 12, 3] as unknown as ExpressionSpecification,
+          'circle-color': ['case', moving, BUS_COLOR, '#e6a3bd'] as unknown as ExpressionSpecification,
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 10, 0, 12, 0.8] as unknown as ExpressionSpecification,
+        },
+      },
+      {
+        id: ids[1]!,
+        type: 'symbol',
+        source,
+        minzoom: 13,
+        layout: {
+          'icon-image': [
+            'case',
+            ['all', moving, pointed],
+            'durbun-bus',
+            moving,
+            'durbun-bus-nodir',
+            pointed,
+            'durbun-bus-still-dir',
+            'durbun-bus-still',
+          ] as unknown as ExpressionSpecification,
+          'icon-size': ['interpolate', ['linear'], ['zoom'], 13, 0.7, 16, 1.05] as unknown as ExpressionSpecification,
+          'icon-rotate': ['coalesce', ['get', 's_track'], 0] as unknown as ExpressionSpecification,
+          'icon-rotation-alignment': 'map',
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+          'symbol-sort-key': ['coalesce', ['get', 's_moving'], 0] as unknown as ExpressionSpecification,
+        },
+      },
+    ];
+  }
+
+  if (layer.id === 'bus-stops') {
+    return [
+      {
+        id: ids[0]!,
+        type: 'circle',
+        source,
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 14, 3, 17, 5.5] as unknown as ExpressionSpecification,
+          'circle-color': '#ffffff',
+          'circle-stroke-color': BUS_COLOR,
+          'circle-stroke-width': 1.8,
+        },
+      },
+      {
+        id: ids[1]!,
+        type: 'symbol',
+        source,
+        minzoom: 16,
+        layout: {
+          'text-field': ['get', 'title'],
+          'text-font': FONT_BOLD,
+          'text-size': 10,
+          'text-anchor': 'top',
+          'text-offset': [0, 0.7],
+          'text-optional': true,
+        },
+        paint: { 'text-color': '#7a1f3d', 'text-halo-color': '#ffffff', 'text-halo-width': 1.4 },
       },
     ];
   }
@@ -477,24 +620,47 @@ function firstPointLayer(map: MapLibreMap): string | undefined {
     .layers?.find((l) => l.id.startsWith('durbun-') && !l.id.startsWith('durbun-focus') && !l.id.startsWith('durbun-route') && POINT_SUFFIX.test(l.id))?.id;
 }
 
-/** Adds (or refreshes) every feature layer on the map. Safe to call after each style change. */
+/** What each map source last got, so unchanged layers (thousands of stops) aren't redrawn. */
+const lastData = new WeakMap<MapLibreMap, Map<string, readonly unknown[]>>();
+const sameKey = (a: readonly unknown[] | undefined, b: readonly unknown[]) => !!a && a.length === b.length && a.every((v, i) => v === b[i]);
+
+/**
+ * Adds (or refreshes) every feature layer on the map. Safe to call after each
+ * style change. With `keyOf`, a layer whose key (e.g. its collection and the
+ * filters) hasn't changed keeps its data; hidden layers aren't refreshed until shown.
+ */
 export function syncDataLayers(
   map: MapLibreMap,
   layers: LayerSummary[],
   featuresFor: (layer: LayerSummary) => Feature[],
   isOn: (layer: LayerSummary) => boolean,
+  keyOf?: (layer: LayerSummary) => readonly unknown[] | undefined,
 ): void {
+  let seen = lastData.get(map);
+  if (!seen) lastData.set(map, (seen = new Map()));
   if (!map.hasImage(ARROW_IMAGE)) map.addImage(ARROW_IMAGE, arrowImage(), { pixelRatio: 2 });
   if (!map.hasImage('durbun-plane-low')) {
     for (const [name, c] of Object.entries(mapImages())) map.addImage(name, imageData(c), { pixelRatio: 2 });
   }
-  // Areas first so points always end up above them.
-  const ordered = [...layers.filter((l) => l.shape === 'areas'), ...layers.filter((l) => l.shape !== 'areas')];
+  // Areas first, then networks of lines, so points always end up above them.
+  const rank = (l: LayerSummary) => (l.shape === 'areas' ? 0 : l.shape === 'network' ? 1 : 2);
+  const ordered = [...layers].sort((a, b) => rank(a) - rank(b));
   for (const layer of ordered) {
     if (layer.raster) continue;
     const src = sourceId(layer.id);
-    const data = prepare(featuresFor(layer)) as unknown as Parameters<GeoJSONSource['setData']>[0];
     const existing = map.getSource(src);
+    const on = isOn(layer);
+    const key = keyOf?.(layer);
+    if (existing && (!on || (key && sameKey(seen.get(layer.id), key)))) {
+      if (!on) seen.delete(layer.id);
+      for (const id of styleLayerIds(layer)) {
+        if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
+      }
+      continue;
+    }
+    if (key) seen.set(layer.id, key);
+    else seen.delete(layer.id);
+    const data = prepare(featuresFor(layer)) as unknown as Parameters<GeoJSONSource['setData']>[0];
     if (existing && 'setData' in existing) {
       (existing as GeoJSONSource).setData(data);
     } else if (!existing) {
@@ -504,11 +670,12 @@ export function syncDataLayers(
         // News pins in the same province gather into one numbered circle.
         ...(layer.listed ? { cluster: true, clusterRadius: 36, clusterMaxZoom: 9 } : {}),
       });
-      const before = layer.shape === 'areas' ? labelAnchor(map) : undefined;
+      // Areas and networks go under the basemap's labels; points on top of everything.
+      const before = layer.shape === 'areas' || layer.shape === 'network' ? labelAnchor(map) : undefined;
       for (const spec of specsFor(layer)) map.addLayer(spec, before);
     }
     for (const id of styleLayerIds(layer)) {
-      if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', isOn(layer) ? 'visible' : 'none');
+      if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
     }
   }
 }
@@ -784,8 +951,12 @@ export function featureCentre(f: Feature): { lng: number; lat: number; area: boo
   const g = f.geometry;
   if (!g) return undefined;
   if (g.type === 'Point') return { lng: g.coordinates[0], lat: g.coordinates[1], area: false };
-  const coords =
-    g.type === 'LineString' ? g.coordinates : g.type === 'Polygon' ? g.coordinates.flat() : g.coordinates.flat(2);
+  const coords: Position[] =
+    g.type === 'LineString'
+      ? g.coordinates
+      : g.type === 'Polygon' || g.type === 'MultiLineString'
+        ? g.coordinates.flat()
+        : g.coordinates.flat(2);
   if (coords.length === 0) return undefined;
   const [w, s, e, n] = lineBounds(coords.map((c) => [c[0], c[1]]));
   return { lng: (w + e) / 2, lat: (s + n) / 2, area: true };
@@ -1072,5 +1243,130 @@ export function syncTrack(map: MapLibreMap, fc: FeatureCollection): void {
       'text-allow-overlap': true,
     },
     paint: { 'text-color': '#1e293b', 'text-halo-color': '#ffffff', 'text-halo-width': 2 },
+  });
+}
+
+// ---- the selected bus line ----
+
+const TRANSIT_SOURCE = 'durbun-transit';
+
+/**
+ * A bus line on the map: its route both ways (the selected bus's direction
+ * stronger; dashed where drawn stop to stop), its stops, and rings around its
+ * buses where the bus layer shows them now.
+ */
+export function transitFeatures(
+  line: TransitLine | undefined,
+  direction: 'G' | 'D' | undefined,
+  positionOf: (vehicleId: string) => [number, number] | undefined,
+): FeatureCollection {
+  if (!line) return { type: 'FeatureCollection', features: [] };
+  const features: Feature[] = [];
+  const f = (geometry: unknown, props: Record<string, unknown>): Feature => ({ type: 'Feature', geometry, properties: props }) as unknown as Feature;
+  for (const r of line.routes) {
+    const strong = !direction || r.direction === direction ? 1 : 0;
+    features.push(f({ type: 'LineString', coordinates: r.coordinates }, { part: 'route', strong, approximate: r.approximate ? 1 : 0 }));
+  }
+  for (const st of line.stops) {
+    if (direction && st.direction !== direction) continue;
+    features.push(f({ type: 'Point', coordinates: [st.lng, st.lat] }, { part: 'stop', title: st.name, id: `stop:${st.code}` }));
+  }
+  for (const v of line.vehicles) {
+    const at = positionOf(v.id) ?? [v.lng, v.lat];
+    features.push(f({ type: 'Point', coordinates: at }, { part: 'vehicle', title: v.doorNo, id: v.id }));
+  }
+  return { type: 'FeatureCollection', features };
+}
+
+export function syncTransit(map: MapLibreMap, fc: FeatureCollection): void {
+  const data = fc as unknown as Parameters<GeoJSONSource['setData']>[0];
+  const existing = map.getSource(TRANSIT_SOURCE) as GeoJSONSource | undefined;
+  if (existing) {
+    existing.setData(data);
+    return;
+  }
+  map.addSource(TRANSIT_SOURCE, { type: 'geojson', data: data as never });
+  const part = (p: string) => ['==', ['get', 'part'], p] as unknown as ExpressionSpecification;
+  const before = firstPointLayer(map);
+  map.addLayer(
+    {
+      id: `${TRANSIT_SOURCE}-casing`,
+      type: 'line',
+      source: TRANSIT_SOURCE,
+      filter: ['all', part('route'), ['==', ['get', 'strong'], 1]] as unknown as ExpressionSpecification,
+      layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: { 'line-color': '#ffffff', 'line-width': 7, 'line-opacity': 0.9 },
+    },
+    before,
+  );
+  map.addLayer(
+    {
+      id: `${TRANSIT_SOURCE}-route`,
+      type: 'line',
+      source: TRANSIT_SOURCE,
+      filter: ['all', part('route'), ['==', ['get', 'approximate'], 0]] as unknown as ExpressionSpecification,
+      layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: {
+        'line-color': BUS_COLOR,
+        'line-width': ['case', ['==', ['get', 'strong'], 1], 4, 2.5] as unknown as ExpressionSpecification,
+        'line-opacity': ['case', ['==', ['get', 'strong'], 1], 0.95, 0.4] as unknown as ExpressionSpecification,
+      },
+    },
+    before,
+  );
+  map.addLayer(
+    {
+      id: `${TRANSIT_SOURCE}-route-approx`,
+      type: 'line',
+      source: TRANSIT_SOURCE,
+      filter: ['all', part('route'), ['==', ['get', 'approximate'], 1]] as unknown as ExpressionSpecification,
+      paint: {
+        'line-color': BUS_COLOR,
+        'line-width': ['case', ['==', ['get', 'strong'], 1], 3.5, 2] as unknown as ExpressionSpecification,
+        'line-opacity': ['case', ['==', ['get', 'strong'], 1], 0.9, 0.4] as unknown as ExpressionSpecification,
+        'line-dasharray': [2, 1.5],
+      },
+    },
+    before,
+  );
+  map.addLayer({
+    id: `${TRANSIT_SOURCE}-stop`,
+    type: 'circle',
+    source: TRANSIT_SOURCE,
+    filter: part('stop'),
+    paint: {
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 2.5, 15, 5] as unknown as ExpressionSpecification,
+      'circle-color': '#ffffff',
+      'circle-stroke-color': BUS_COLOR,
+      'circle-stroke-width': 2,
+    },
+  });
+  map.addLayer({
+    id: `${TRANSIT_SOURCE}-stop-label`,
+    type: 'symbol',
+    source: TRANSIT_SOURCE,
+    filter: part('stop'),
+    minzoom: 14,
+    layout: {
+      'text-field': ['get', 'title'],
+      'text-font': FONT_BOLD,
+      'text-size': 10,
+      'text-anchor': 'top',
+      'text-offset': [0, 0.7],
+      'text-optional': true,
+    },
+    paint: { 'text-color': '#7a1f3d', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 },
+  });
+  map.addLayer({
+    id: `${TRANSIT_SOURCE}-vehicle`,
+    type: 'circle',
+    source: TRANSIT_SOURCE,
+    filter: part('vehicle'),
+    paint: {
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 7, 15, 14] as unknown as ExpressionSpecification,
+      'circle-color': 'rgba(0, 0, 0, 0)',
+      'circle-stroke-color': BUS_COLOR,
+      'circle-stroke-width': 2.5,
+    },
   });
 }

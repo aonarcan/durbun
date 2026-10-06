@@ -28,6 +28,11 @@ export interface SourceDefinition {
    * While any is missing the source stays switched off and the status page shows the hint.
    */
   setup?: { env: string[]; hint: { tr: string; en: string } };
+  /**
+   * Fetch only while someone has the layer on (the browser asks for it), so a
+   * large feed like every İstanbul bus isn't pulled all day for nobody.
+   */
+  onDemand?: boolean;
   fetch(ctx: SourceContext): Promise<SourceResult>;
 }
 

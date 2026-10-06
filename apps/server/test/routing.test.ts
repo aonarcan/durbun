@@ -56,6 +56,12 @@ describe('router', () => {
       async postJson<T>() {
         return {} as T;
       },
+      async postText() {
+        return '';
+      },
+      async getResponse() {
+        return new Response('');
+      },
     };
     return h;
   }

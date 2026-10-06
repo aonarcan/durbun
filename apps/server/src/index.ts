@@ -9,6 +9,8 @@ import { FlightHistory } from './flights.ts';
 import { createRouter } from './routing.ts';
 import { layers, sources } from './sources/index.ts';
 import { readVersion } from './version.ts';
+import { IstanbulTransit } from './transit.ts';
+import { RouteShapes, StopLines } from './transit-cache.ts';
 
 const store = new Store(layers, sources, config.disabledSources);
 const http = createHttpClient(config.userAgent);
@@ -23,6 +25,8 @@ const app = await buildApp({
   cloudTile,
   version,
   flights: new FlightHistory(http),
+  transit: new IstanbulTransit(http, new RouteShapes(http, config.cacheDir), new StopLines(http, config.cacheDir)),
+  onWake: (layerId) => scheduler.wake(layerId),
 });
 
 await app.listen({ port: config.port, host: config.host });

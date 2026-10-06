@@ -5,6 +5,7 @@ import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { pointOf, type ServerEvent } from '@durbun/core';
 import type { FlightPaths } from './flights.ts';
+import type { IstanbulTransit } from './transit.ts';
 import type { Store } from './kit/store.ts';
 import { PROVINCES_FILE } from './provinces.ts';
 import { isTravelMode, parseLngLat, type Router } from './routing.ts';
@@ -23,10 +24,14 @@ export interface AppOptions {
   version?: VersionInfo;
   /** Whole flights of selected aircraft from outside histories; without it, only Dürbün's own positions. */
   flights?: FlightPaths;
+  /** İstanbul bus, line and stop lookups; /api/transit answers 503 without them. */
+  transit?: Pick<IstanbulTransit, 'bus' | 'line' | 'stop'>;
+  /** Someone switched on a layer nobody was watching (so its on-demand sources can start now). */
+  onWake?: (layerId: string) => void;
 }
 
 /** The HTTP API plus, in production, the built web app. */
-export async function buildApp({ store, cesiumIonToken, webDist, router, cloudTile, version, flights }: AppOptions): Promise<FastifyInstance> {
+export async function buildApp({ store, cesiumIonToken, webDist, router, cloudTile, version, flights, transit, onWake }: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   // Layers like ships and news are large JSON; gzip makes them several times smaller over Tailscale.
   await app.register(fastifyCompress, { encodings: ['gzip', 'deflate'] });
@@ -44,7 +49,39 @@ export async function buildApp({ store, cesiumIonToken, webDist, router, cloudTi
   app.get<{ Params: { id: string } }>('/api/layers/:id', async (req, reply) => {
     const fc = store.getCollection(req.params.id);
     if (!fc) return reply.code(404).send({ error: 'Unknown layer' });
+    if (store.want(req.params.id)) onWake?.(req.params.id);
     return fc;
+  });
+
+  // Browsers showing on-demand layers say so every minute, so those sources keep running.
+  app.get<{ Querystring: { layers?: string } }>('/api/want', async (req) => {
+    for (const id of (req.query.layers ?? '').split(',').filter(Boolean)) {
+      if (store.want(id)) onWake?.(id);
+    }
+    return { ok: true };
+  });
+
+  // İstanbul buses, lines and stops, looked up when one is selected.
+  const transitCode = /^[\p{L}\d][\p{L}\d .\-/]{0,15}$/u;
+  app.get<{ Params: { kind: string; code: string } }>('/api/transit/:kind/:code', async (req, reply) => {
+    if (!transit) return reply.code(503).send({ error: 'Transit lookups are not available' });
+    const { kind, code } = req.params;
+    if (!transitCode.test(code)) return reply.code(400).send({ error: 'Bad code' });
+    try {
+      const mapped = (layer: string, id: string) => store.getCollection(layer)?.features.find((f) => f.properties.id === id);
+      if (kind === 'bus') {
+        const feature = mapped('buses', `bus:${code}`);
+        return { ...(await transit.bus(code)), ...(feature ? { feature } : {}) };
+      }
+      if (kind === 'line') return await transit.line(code);
+      if (kind === 'stop') {
+        const feature = mapped('bus-stops', `stop:${code}`);
+        return { ...(await transit.stop(code)), ...(feature ? { feature } : {}) };
+      }
+    } catch (err) {
+      return reply.code(502).send({ error: err instanceof Error ? err.message : String(err) });
+    }
+    return reply.code(404).send({ error: 'Unknown kind' });
   });
 
   app.get('/api/sources', async () => store.allHealth());

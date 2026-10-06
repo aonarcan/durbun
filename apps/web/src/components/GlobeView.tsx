@@ -15,7 +15,7 @@ import {
 } from '../lib/camera.ts';
 import { shownFeatures } from '../lib/filters.ts';
 import { groundAtCentre } from '../lib/globePick.ts';
-import { aircraftNow, extrapolate, planeBand, planeCanvas, PLANE_COLORS, SHIP_COLORS, shipCanvas } from '../lib/icons.ts';
+import { aircraftNow, BUS_COLOR, extrapolate, planeBand, planeCanvas, PLANE_COLORS, SHIP_COLORS, shipCanvas } from '../lib/icons.ts';
 import {
   absoluteTileUrl,
   AFTERSHOCK_COLOR,
@@ -34,7 +34,18 @@ import {
   tempColor,
   WARNING_COLORS,
 } from '../lib/mapLayers.ts';
-import { frameIndex, isVisible, useData, useFilters, useFocus, useRaster, useRoute, useTracks, useUi } from '../state.ts';
+import {
+  frameIndex,
+  isVisible,
+  useData,
+  useFilters,
+  useFocus,
+  useRaster,
+  useRoute,
+  useTracks,
+  useTransit,
+  useUi,
+} from '../state.ts';
 import { GlobeControls, setUpMouse } from './GlobeControls.tsx';
 import type { FlyDetail } from './MapView.tsx';
 
@@ -229,6 +240,45 @@ const GROUND = {
   disableDepthTestDistance: Number.POSITIVE_INFINITY,
 };
 
+/** How far away a dense layer that starts at zoom z (2D) stops being drawn in 3D, in metres. */
+const distanceForZoom = (z: number) => 40_000_000 / 2 ** z;
+
+const BUS_STILL = Cesium.Color.fromCssColorString('#e6a3bd');
+const BUS_MOVING = Cesium.Color.fromCssColorString(BUS_COLOR);
+
+/** A rail line (draped on the ground) or a station on it, in the line's colour. */
+function addNetwork(ds: Cesium.CustomDataSource, f: Feature): void {
+  const color = Cesium.Color.fromCssColorString(String(f.properties.style?.color ?? '#6c7a89'));
+  const g = f.geometry;
+  if (g?.type === 'Point') {
+    ds.entities.add({
+      id: f.properties.id,
+      position: Cesium.Cartesian3.fromDegrees(g.coordinates[0], g.coordinates[1]),
+      point: {
+        ...GROUND,
+        pixelSize: 8,
+        color: f.properties.kind === 'station-disrupted' ? Cesium.Color.fromCssColorString('#ffd43b') : Cesium.Color.WHITE,
+        outlineColor: color,
+        outlineWidth: 2.5,
+      },
+    });
+    return;
+  }
+  const parts = g?.type === 'LineString' ? [g.coordinates] : g?.type === 'MultiLineString' ? g.coordinates : [];
+  const building = f.properties.style?.building === 1;
+  parts.forEach((part, i) =>
+    ds.entities.add({
+      id: `${f.properties.id}#${i}`,
+      polyline: {
+        positions: Cesium.Cartesian3.fromDegreesArray(part.flatMap((c) => [c[0], c[1]])),
+        clampToGround: true,
+        width: building ? 2 : 4,
+        material: building ? new Cesium.PolylineDashMaterialProperty({ color: color.withAlpha(0.6), dashLength: 12 }) : color.withAlpha(0.9),
+      },
+    }),
+  );
+}
+
 /** A warning area: a tinted province with a coloured edge. Entity ids get "#n" so picking can find the feature. */
 function addArea(ds: Cesium.CustomDataSource, layer: LayerSummary, f: Feature): void {
   const g = f.geometry;
@@ -392,6 +442,8 @@ export default function GlobeView() {
   const container = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<Cesium.Viewer | null>(null);
   const sourcesRef = useRef(new Map<string, Cesium.CustomDataSource>());
+  /** Per layer: the data each entity set was built from, to skip rebuilding unchanged layers. */
+  const builtRef = useRef(new Map<string, unknown[]>());
   const imageryRef = useRef(new Map<string, { layerId: string; imagery: Cesium.ImageryLayer }>());
   const [hasToken, setHasToken] = useState<boolean | undefined>(undefined);
   const [ready, setReady] = useState(false);
@@ -473,6 +525,7 @@ export default function GlobeView() {
     return () => {
       cancelled = true;
       sourcesRef.current.clear();
+      builtRef.current.clear();
       imageryRef.current.clear();
       viewerRef.current = null;
       if (viewer && !viewer.isDestroyed()) viewer.destroy();
@@ -507,12 +560,23 @@ export default function GlobeView() {
         sourcesRef.current.set(layer.id, ds);
         void viewer.dataSources.add(ds);
       }
-      ds.show = isVisible(layer, visible);
+      const on = isVisible(layer, visible);
+      ds.show = on;
+      // Rebuild only what changed, and nothing while hidden (thousands of stops are slow to rebuild).
+      const key = [collections[layer.id], filters.windows, filters.minValues];
+      const last = builtRef.current.get(layer.id);
+      if (!on || (last && last.length === key.length && last.every((v, i) => v === key[i]))) continue;
+      builtRef.current.set(layer.id, key);
+      const far = layer.minZoom ? new Cesium.DistanceDisplayCondition(0, distanceForZoom(layer.minZoom)) : undefined;
       ds.entities.suspendEvents();
       ds.entities.removeAll();
       for (const f of shownFeatures(layer, collections[layer.id], filters)) {
         if (layer.shape === 'areas') {
           addArea(ds, layer, f);
+          continue;
+        }
+        if (layer.shape === 'network') {
+          addNetwork(ds, f);
           continue;
         }
         const at = pointOf(f);
@@ -529,6 +593,22 @@ export default function GlobeView() {
         }
         if (layer.id === 'ships') {
           addShip(ds, f, position);
+          continue;
+        }
+        if (layer.id === 'buses' || layer.id === 'bus-stops') {
+          const stop = layer.id === 'bus-stops';
+          ds.entities.add({
+            id: f.properties.id,
+            position,
+            point: {
+              ...GROUND,
+              pixelSize: stop ? 6 : 7,
+              color: stop ? Cesium.Color.WHITE : f.properties.style?.moving === 1 ? BUS_MOVING : BUS_STILL,
+              outlineColor: stop ? BUS_MOVING : Cesium.Color.WHITE,
+              outlineWidth: stop ? 2 : 1,
+              ...(far ? { distanceDisplayCondition: far } : {}),
+            },
+          });
           continue;
         }
         ds.entities.add(
@@ -555,6 +635,42 @@ export default function GlobeView() {
     }
     viewer.scene.requestRender();
   }, [layers, collections, visible, filters, ready]);
+
+  // The selected bus's line (or one picked at a stop): its route both ways and its stops.
+  const transitLine = useTransit((s) => s.line);
+  const transitDirection = useTransit((s) => s.direction);
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer || !ready || !transitLine) return;
+    const ds = new Cesium.CustomDataSource('transit');
+    void viewer.dataSources.add(ds);
+    transitLine.routes.forEach((r, i) => {
+      const strong = !transitDirection || r.direction === transitDirection;
+      ds.entities.add({
+        id: `trail:transit:${i}`,
+        polyline: {
+          positions: Cesium.Cartesian3.fromDegreesArray(r.coordinates.flatMap((c) => [c[0], c[1]])),
+          clampToGround: true,
+          width: strong ? 5 : 3,
+          material: r.approximate
+            ? new Cesium.PolylineDashMaterialProperty({ color: BUS_MOVING.withAlpha(strong ? 0.9 : 0.4), dashLength: 14 })
+            : BUS_MOVING.withAlpha(strong ? 0.95 : 0.4),
+        },
+      });
+    });
+    for (const st of transitLine.stops) {
+      if (transitDirection && st.direction !== transitDirection) continue;
+      ds.entities.add({
+        id: `stop:${st.code}`,
+        position: Cesium.Cartesian3.fromDegrees(st.lng, st.lat),
+        point: { ...GROUND, pixelSize: 7, color: Cesium.Color.WHITE, outlineColor: BUS_MOVING, outlineWidth: 2 },
+      });
+    }
+    viewer.scene.requestRender();
+    return () => {
+      if (!viewer.isDestroyed()) void viewer.dataSources.remove(ds, true);
+    };
+  }, [ready, transitLine, transitDirection]);
 
   // Trails behind aircraft (at altitude) and ships, and the selected one's full path.
   const tails = useTracks((s) => s.tails);

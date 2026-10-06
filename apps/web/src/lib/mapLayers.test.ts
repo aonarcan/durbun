@@ -12,6 +12,7 @@ import {
   tempColor,
   trackBounds,
   trackFeatures,
+  transitFeatures,
   trackStats,
   type TrackPoint,
 } from './mapLayers.ts';
@@ -181,5 +182,41 @@ describe('paths', () => {
 
   it('writes colours with transparency', () => {
     expect(rgba('#1f78b4', 0.5)).toBe('rgba(31, 120, 180, 0.5)');
+  });
+});
+
+describe('bus lines on the map', () => {
+  const line = {
+    code: '559C',
+    name: 'RUMELİ HİSARÜSTÜ - TAKSİM',
+    routes: [
+      { direction: 'G' as const, coordinates: [[29.0, 41.08], [29.02, 41.06]] as [number, number][], approximate: false },
+      { direction: 'D' as const, coordinates: [[29.02, 41.06], [29.0, 41.08]] as [number, number][], approximate: true },
+    ],
+    stops: [
+      { code: '1', name: 'A', lng: 29.0, lat: 41.08, direction: 'G' as const, order: 1 },
+      { code: '2', name: 'B', lng: 29.02, lat: 41.06, direction: 'D' as const, order: 1 },
+    ],
+    vehicles: [{ id: 'bus:A-010', doorNo: 'A-010', lng: 29.01, lat: 41.07 }],
+    notices: [],
+  };
+
+  it("draws the bus's direction stronger, its stops, and rings where its buses are now", () => {
+    const fc = transitFeatures(line, 'G', (id) => (id === 'bus:A-010' ? [29.011, 41.071] : undefined));
+    const props = fc.features.map((f) => f.properties as unknown as Record<string, unknown>);
+    expect(props.filter((p) => p.part === 'route').map((p) => [p.strong, p.approximate])).toEqual([
+      [1, 0],
+      [0, 1],
+    ]);
+    // Only the stops of the bus's direction, each clickable.
+    expect(props.filter((p) => p.part === 'stop').map((p) => p.id)).toEqual(['stop:1']);
+    const ring = fc.features.find((f) => (f.properties as unknown as { part: string }).part === 'vehicle')!;
+    expect(ring.geometry).toEqual({ type: 'Point', coordinates: [29.011, 41.071] });
+    expect(transitFeatures(undefined, undefined, () => undefined).features).toEqual([]);
+  });
+
+  it('gives the rail network and buses their own map layers', () => {
+    expect(styleLayerIds({ id: 'metro', shape: 'network' })).toEqual(['durbun-metro-line', 'durbun-metro-building', 'durbun-metro-circle', 'durbun-metro-label']);
+    expect(styleLayerIds({ id: 'buses' })).toEqual(['durbun-buses-circle', 'durbun-buses-icon']);
   });
 });

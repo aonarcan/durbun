@@ -4,7 +4,7 @@ Türkiye için canlı bir harita: trafik, afetler, ulaşım ve daha fazlası, te
 
 Dürbün is a live map of Türkiye that pulls Turkish public sources (AFAD, İBB and more to come) into one 2D and 3D view. It runs on your own computer and is meant for you and a few friends.
 
-**Stage 2 of 5 (hazards, weather, air and sea, news).** What works now:
+**Stage 3 of 5 (public transport), İstanbul part done.** What works now:
 
 - Four views: regular map, satellite, night, and a 3D globe that keeps the same place when you switch. In 3D, right-drag rotates and tilts, and buttons on the right do the same.
 - **Earthquakes** from AFAD: pick the last 1 hour to 7 days and a minimum magnitude (all, 2+, 3+, 4+, 5+). Click one for the **earthquake view**: distance rings, the aftershocks recorded since, the provinces within reach, other events nearby, a link to AFAD's page for the event, and a note when it may itself be an aftershock of a bigger one. A strong earthquake (M4.5+ in the last 6 hours) puts a banner at the top of the map.
@@ -15,6 +15,11 @@ Dürbün is a live map of Türkiye that pulls Turkish public sources (AFAD, İBB
 - **Paths**: aircraft and ships leave a short fading trail. Click an aircraft to see its whole current flight from the stand it left, coloured by altitude, with the departure and destination airports and the rest of the way dotted; stretches nobody saw are dashed. "Tüm yolu göster" fits the whole path on screen. The flight history comes from adsb.lol's traces, with OpenSky filling holes; ship paths are what the server has seen (up to 12 hours).
 - **The Straits**: when the İstanbul and Çanakkale straits are open or suspended in each direction today (KEGM), with a timeline and the ships waiting at each end.
 - **News**: the latest headlines from 15 Turkish outlets in a **Haberler** tab, with search and an outlet filter; stories that name a province in their headline can also be shown as pins on the map.
+- **İstanbul public transport**:
+  - **Buses**: every İETT bus live (about 6,000 by day), as dots when zoomed out and pointed icons from street level. Click a bus to see the line it is running now, where it's heading and its nearest stop, with the line's route, stops and other buses drawn on the map, and the operator's notices for that line. The bus feed runs only while someone has the layer on.
+  - **Bus stops** (from zoom 14): click one for the lines calling there and the buses on their way ("3 durak önce"); tap a line to draw it.
+  - **Metro, tram, funicular, cable car and Marmaray** in their official colours, lines being built dashed, and Metro İstanbul's live service notices (a disrupted line's stations turn yellow). Stations show lifts, escalators and toilets.
+  - **Ferry piers** of Şehir Hatları and İDO with opening hours; the ferries themselves are on the Ships layer.
 - İBB traffic notices in İstanbul, İstanbul's on-duty pharmacies, and directions to a pharmacy by car or on foot.
 - A source status page (`Kaynak durumu`) that shows whether each source is working, how fresh its data is, and its last error.
 - Turkish first, English with one click.
@@ -121,6 +126,11 @@ Dürbün is a private, non-commercial tool. Each source is polled gently, identi
 | Aircraft | [adsb.fi](https://adsb.fi) open data (30 s), [adsb.lol](https://adsb.lol) (90 s), [OpenSky](https://opensky-network.org) with a free account (75 s, to stay within its 4,000 daily credits) | |
 | Flight paths and routes | [adsb.lol](https://adsb.lol) traces (about a day per aircraft), [OpenSky](https://opensky-network.org) current-flight tracks (only when adsb.lol has holes; no account needed), [adsb.im](https://adsb.im) route database | Only when you click an aircraft; cached 3 min (traces), 15 min (OpenSky), 3 h (routes) |
 | Ships | [AISStream](https://aisstream.io) live AIS stream (free key) | Continuous; the map updates every minute |
+| Buses (İstanbul) | [İETT](https://data.ibb.gov.tr/dataset/iett-filo-durum-web-servisi) fleet positions (İBB open data) | 30 s, only while someone has the layer on |
+| Bus lines, stops and notices | İETT web services on İBB's open-data gateway: stops, lines, the buses and stops of a line, line notices, yesterday's trips (to tell which line a bus runs) | Stops daily; the rest only when you click a bus or stop, cached 20 s to 6 h |
+| Bus routes and lines per stop | İBB open data: [İETT route shapes](https://data.ibb.gov.tr/dataset/iett-hat-guzergahlari) and [İETT GTFS](https://data.ibb.gov.tr/dataset/iett-gtfs-verisi) | Downloaded the first time you click a bus or stop (about 260 MB and 30 MB), boiled down into the `cache` folder (about 20 MB), refreshed every two weeks |
+| Metro, tram, Marmaray | [Metro İstanbul](https://data.ibb.gov.tr/dataset/metro-istanbul-hat-bilgisi-listesi) lines, stations and service notices; İBB [rail lines](https://data.ibb.gov.tr/dataset/rayli-ulasim-hatlari-vektor-verisi) and [stations](https://data.ibb.gov.tr/dataset/rayli-sistem-istasyon-noktalari-verisi) | Notices 5 min; network daily |
+| Ferry piers | İBB traffic map pier list (Şehir Hatları, İDO) | Daily |
 | Straits | [Kıyı Emniyeti Genel Müdürlüğü](https://www.kiyiemniyeti.gov.tr/bogaz_trafigi) traffic hours (may answer Turkish connections only) | 5 min |
 | News | Public RSS and Atom feeds of Anadolu Ajansı, TRT Haber, BBC Türkçe, DW Türkçe, Euronews Türkçe, Hürriyet, Sabah, Milliyet, Habertürk, NTV, CNN Türk, Sözcü, Cumhuriyet, Halk TV and Medyascope; headline, short snippet and link only | 5 min each |
 | Directions | [FOSSGIS OSRM](https://routing.openstreetmap.de) (OpenStreetMap data) | On request, cached 5 min, at most 20 a minute |
@@ -136,6 +146,8 @@ And on the air, sea and news layers:
 - A fire detection is a heat anomaly seen from orbit: usually a fire (in autumn, often stubble burning), but factories and gas flares appear too.
 - Aircraft and ship coverage depends on volunteer receivers, which are thin over parts of Türkiye; AIS coverage is best around İstanbul and patchy in the Aegean.
 - Aircraft whose owners asked for privacy (the FAA's LADD and PIA programmes) are shown without callsign or registration. Military aircraft get no special label.
+- Which line a bus runs isn't in İETT's fleet feed. Dürbün looks at the lines the bus ran yesterday and checks each line's live bus list; a bus out of service, or one that wasn't out yesterday, shows no line.
+- "N durak önce" counts the stops between a bus and the stop you picked, from the stop İETT says the bus is nearest to; there is no arrival time in İETT's open data. No source gives live metro or tram positions.
 - A news pin sits a few kilometres from the province's centre, so pins for one province can be told apart; the place comes from the first province named in the headline, so it is approximate.
 
 Basemaps: [OpenFreeMap](https://openfreemap.org) (© OpenStreetMap contributors), Esri World Imagery, and CesiumJS for 3D.

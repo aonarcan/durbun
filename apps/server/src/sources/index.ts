@@ -6,6 +6,8 @@ import { kegmStraits } from './kegm-straits.ts';
 import { newsSources } from './news.ts';
 import { aisStream } from './ships.ts';
 import { ibbIncidents } from './ibb-incidents.ts';
+import { iettBuses, iettStops } from './iett.ts';
+import { ibbPiers, metroIstanbul } from './istanbul-rail.ts';
 import { ibbPharmacies } from './ibb-pharmacies.ts';
 import { mgmObservations } from './mgm-observations.ts';
 import { mgmWarnings } from './mgm-warnings.ts';
@@ -75,6 +77,43 @@ export const layers: LayerDefinition[] = [
     attribution: 'İBB Ulaşım Yönetim Merkezi',
   },
   {
+    id: 'buses',
+    name: { tr: 'Otobüsler (İstanbul, canlı)', en: 'Buses (İstanbul, live)' },
+    group: 'transport',
+    color: '#c2255c',
+    defaultOn: false,
+    attribution: 'İETT',
+    lazy: true,
+  },
+  {
+    id: 'bus-stops',
+    name: { tr: 'Otobüs durakları (İstanbul)', en: 'Bus stops (İstanbul)' },
+    group: 'transport',
+    color: '#c2255c',
+    defaultOn: false,
+    attribution: 'İETT',
+    lazy: true,
+    minZoom: 14,
+  },
+  {
+    id: 'metro',
+    name: { tr: 'Metro, tramvay ve Marmaray (İstanbul)', en: 'Metro, tram and Marmaray (İstanbul)' },
+    group: 'transport',
+    color: '#009944',
+    defaultOn: false,
+    attribution: 'Metro İstanbul, İBB',
+    shape: 'network',
+  },
+  {
+    id: 'piers',
+    name: { tr: 'Vapur iskeleleri (İstanbul)', en: 'Ferry piers (İstanbul)' },
+    group: 'transport',
+    color: '#1971c2',
+    glyph: 'V',
+    defaultOn: false,
+    attribution: 'İBB (Şehir Hatları, İDO)',
+  },
+  {
     id: 'pharmacies',
     name: { tr: 'Nöbetçi eczaneler (İstanbul)', en: 'On-duty pharmacies (İstanbul)' },
     group: 'places',
@@ -125,6 +164,10 @@ export const layers: LayerDefinition[] = [
 export const sources: SourceDefinition[] = [
   afadEarthquakes,
   ibbIncidents,
+  iettBuses(),
+  iettStops,
+  metroIstanbul(),
+  ibbPiers,
   ibbPharmacies,
   mgmWarnings,
   mgmObservations,
