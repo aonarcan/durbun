@@ -5,7 +5,9 @@ import { Store } from '../src/kit/store.ts';
 import type { LayerDefinition, SourceDefinition } from '../src/kit/source.ts';
 import { timeWithSuffix } from '../src/kit/text.ts';
 import { provinceAt } from '../src/provinces.ts';
+import { createHttpClient } from '../src/kit/http.ts';
 import {
+  adsbFi,
   mergeAircraft,
   parseOpenSky,
   parseReadsb,
@@ -86,6 +88,21 @@ describe('aircraft', () => {
     expect(merged.properties.details?.callsign).toBeNull();
     expect(merged.properties.title).toBe('BOEING 737-900');
   });
+
+  it('keeps the circles that answered when one is refused', async () => {
+    const urls: string[] = [];
+    const body = text('adsbfi.json');
+    const http = createHttpClient('test', async (url) => {
+      urls.push(url);
+      return url.includes('/lon/35.5/') ? new Response('slow down', { status: 429 }) : new Response(body);
+    });
+    const features = await adsbFi.fetch({ http, signal: new AbortController().signal, now: new Date() });
+    expect(urls).toHaveLength(3);
+    expect(Array.isArray(features) && features.length > 0).toBe(true);
+
+    const refused = createHttpClient('test', async () => new Response('slow down', { status: 429 }));
+    await expect(adsbFi.fetch({ http: refused, signal: new AbortController().signal, now: new Date() })).rejects.toThrow(/429/);
+  }, 10_000);
 
   it('merges in the store so each aircraft appears once', () => {
     const layer: LayerDefinition = {
